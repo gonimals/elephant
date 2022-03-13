@@ -14,7 +14,7 @@ import (
 const maxRegexLength = "40"
 
 //Regular expression used to check that no SQL injection is produced
-var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_]{1," + maxRegexLength + "}$")
+var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + ContextSymbol + "]{1," + maxRegexLength + "}$")
 
 //These are error strings returned by the driver
 const errorSQLNoSuchTable = "no such table: "
@@ -23,7 +23,7 @@ const errorPossibleSQLi = " could be a SQL injection attack"
 
 //These are the sqlite table creation statements
 const sqlite3CheckTable = "select id from %s limit 1"
-const sqlite3CreateTable = "create table %s ( id sqlite3_int64 primary key, value text )"
+const sqlite3CreateTable = "create table '%s' ( id sqlite3_int64 primary key, value text )"
 
 //These are the statement names
 const (
@@ -50,11 +50,11 @@ type driverSqlite3 struct {
 
 func init() {
 	sqliteCreationMap = make(map[int]string)
-	sqliteCreationMap[stmtRetrieve] = "select value from %s where id = ?"
-	sqliteCreationMap[stmtRetrieveAll] = "select id, value from %s"
-	sqliteCreationMap[stmtInsert] = "insert into %s (id, value) values (?, ?)"
-	sqliteCreationMap[stmtDelete] = "delete from %s where id = ?"
-	sqliteCreationMap[stmtUpdate] = "update %s set value = ? where id = ?"
+	sqliteCreationMap[stmtRetrieve] = "select value from '%s' where id = ?"
+	sqliteCreationMap[stmtRetrieveAll] = "select id, value from '%s'"
+	sqliteCreationMap[stmtInsert] = "insert into '%s' (id, value) values (?, ?)"
+	sqliteCreationMap[stmtDelete] = "delete from '%s' where id = ?"
+	sqliteCreationMap[stmtUpdate] = "update '%s' set value = ? where id = ?"
 }
 
 // ConnectSQLdriverDatabase should be the first method called to initialize the db connection
@@ -80,11 +80,8 @@ func cancelTypeHandlerCreation(th *typeHandler) *typeHandler {
 	return nil
 }
 
-// createTypeHandler just populates the struct with the required SQL statements and checks for SQLi at source code
+// createTypeHandler just populates the struct with the required SQL statements
 func (d *driverSqlite3) createTypeHandler(input string) (th *typeHandler, err error) {
-	if !alphanumericRegexp.MatchString(input) {
-		log.Fatal(input + errorPossibleSQLi)
-	}
 	th = new(typeHandler)
 	th.name = input
 	th.stmts = make(map[int]*sql.Stmt)
@@ -98,6 +95,7 @@ func (d *driverSqlite3) createTypeHandler(input string) (th *typeHandler, err er
 	return
 }
 
+//ensureTableIsHandled checks if the table is already handled by the driver and handles it if not, checking for SQLi at source code
 func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 	th = d.checkedTypes[input]
 	if th != nil {
@@ -106,6 +104,9 @@ func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 
 	//Start the handling tasks
 	var testID int64
+	if !alphanumericRegexp.MatchString(input) {
+		log.Fatal(input + errorPossibleSQLi)
+	}
 	err := d.db.QueryRow(fmt.Sprintf(sqlite3CheckTable, input)).Scan(&testID)
 	if err == nil || strings.Contains(err.Error(), errorSQLNoRowsInResultSet) {
 		// Table exists and can be empty

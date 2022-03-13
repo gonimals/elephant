@@ -60,7 +60,7 @@ func (e *Elephant) execRetrieveBy(inputType reflect.Type, attribute string, obje
 	lt := e.learntTypes[inputType]
 	filterType := lt.fields[attribute]
 	if filterType == nil || reflect.TypeOf(object) != filterType {
-		log.Println("RetrieveBy executed with invalid arguments:", filterType, reflect.TypeOf(object))
+		//log.Println("RetrieveBy executed with invalid arguments:", filterType, reflect.TypeOf(object))
 		return nil
 	}
 	for _, elem := range e.data[inputType] {

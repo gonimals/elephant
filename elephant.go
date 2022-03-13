@@ -3,8 +3,12 @@ package elephant
 import (
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
+	"strings"
 )
+
+const ContextSymbol = "."
 
 // Structs
 type learntType struct {
@@ -51,6 +55,9 @@ func examineType(input reflect.Type) (output *learntType) {
 	output.fields = make(map[string]reflect.Type)
 	output.updates = make(map[string]struct{})
 	output.name = input.Name()
+	if strings.Contains(output.name, ContextSymbol) {
+		log.Fatalln("Type name " + output.name + " contains the character " + ContextSymbol + " which is also used as context symbol. This should never happen.")
+	}
 
 	for i := 0; i < input.NumField(); i++ {
 		field := input.Field(i)
@@ -85,7 +92,7 @@ func setKey(inputType reflect.Type, input interface{}, key int64) {
 
 func (e *Elephant) getTableName(inputType reflect.Type) (output string) {
 	if e.Context != "" {
-		output = e.Context + "."
+		output = e.Context + ContextSymbol
 	}
 	output += examineType(inputType).name
 	return

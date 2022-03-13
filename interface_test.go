@@ -11,7 +11,7 @@ func TestCorrectFunctions(t *testing.T) {
 	os.Remove(temporaryDB)
 	err := Initialize("sqlite3://" + temporaryDB)
 	if err != nil {
-		t.Error(err)
+		t.Error("Initialization failed", err)
 	}
 	defer Close()
 	structCheckType := reflect.TypeOf((*structCheck)(nil))
@@ -70,6 +70,16 @@ func TestCorrectFunctions(t *testing.T) {
 		for key, value := range MainContext.data[structCheckType] {
 			log.Println(key, value)
 		}
+	}
+	customContext, err := GetElephant("customContext")
+	if err != nil {
+		t.Error("Error getting custom context", err)
+	}
+	if _, err = customContext.Create(structCheckType, &structCheck{
+		Myint64:  0,
+		Mystring: `[ {name: 'item', sort: [0 ,0] } ]`,
+	}); err != nil {
+		t.Error("Creation failed with custom context")
 	}
 }
 
