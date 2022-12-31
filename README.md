@@ -13,3 +13,11 @@ This library will store every instance inside a table with the name of the struc
 Supported URIs, right now, follow this criteria:
 
 - `sqlite3:path/to/file.db` (if the file doesn´t exist, it will be created)
+
+# Compiling and testing
+go get -u
+go test -cover
+
+sqlite3 /tmp/foo.db
+.tables
+select * from structCheck;

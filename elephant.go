@@ -1,7 +1,6 @@
 package elephant
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -30,21 +29,10 @@ type dbDriver interface {
 var currentElephants map[string]*Elephant
 var learntTypes map[reflect.Type]*learntType
 
-//copyInstance Sets src values in the dest instance
-func copyInstance(src, dest interface{}) error {
-	if reflect.TypeOf(src) != reflect.TypeOf(dest) || reflect.TypeOf(src).Kind() != reflect.Ptr {
-		return fmt.Errorf("Cannot copy one instance to other if type differs")
-	}
-	srcValue := reflect.ValueOf(src).Elem()
-	destValue := reflect.ValueOf(dest).Elem()
-	destValue.Set(srcValue)
-	return nil
-}
-
-//examineType will check that the type can be transformed into JSON and has an Id parameter
+// examineType will check that the type can be transformed into JSON and has an Id parameter
 func examineType(input reflect.Type) (output *learntType) {
 	if input.Kind() != reflect.Ptr || input.Elem().Kind() != reflect.Struct {
-		panic(errors.New(input.String() + " is not a pointer to struct"))
+		panic(fmt.Errorf(input.String() + " is not a pointer to struct"))
 	}
 	input = input.Elem()
 	output = learntTypes[input]
@@ -78,8 +66,11 @@ func examineType(input reflect.Type) (output *learntType) {
 // Returns the key from the input ptr object
 func getKey(inputType reflect.Type, input interface{}) (output int64, err error) {
 	typeDescriptor := examineType(inputType)
+	if reflect.TypeOf(input) != inputType {
+		return 0, fmt.Errorf("The input object should match with the inputType")
+	}
 	if reflect.ValueOf(input).IsNil() {
-		return 0, errors.New("No nil key creation allowed")
+		return 0, fmt.Errorf("No nil key creation allowed")
 	}
 	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).Int()
 	return

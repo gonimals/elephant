@@ -7,10 +7,10 @@ import (
 	"sync"
 )
 
-//MaxStructLength defines how long can be a structure converted to JSON to be stored
+// MaxStructLength defines how long can be a structure converted to JSON to be stored
 const MaxStructLength = 65535 //64k
 
-//Elephant provides db access to a concrete context
+// Elephant provides db access to a concrete context
 type Elephant struct {
 	Context      string
 	data         map[reflect.Type](map[int64]interface{})
@@ -20,13 +20,13 @@ type Elephant struct {
 	managedTypes map[reflect.Type]bool
 }
 
-//MainContext is the default context
+// MainContext is the default context
 var MainContext *Elephant
 
-//db is the database driver in use
+// db is the database driver in use
 var db dbDriver
 
-//Initialize requires a supported uri using one of the following supported formats
+// Initialize requires a supported uri using one of the following supported formats
 func Initialize(uri string) (err error) {
 	sqlite3 := regexp.MustCompile(`sqlite3://`)
 	if sqlite3split := sqlite3.Split(uri, 2); len(sqlite3split) == 2 {
@@ -42,7 +42,7 @@ func Initialize(uri string) (err error) {
 	return
 }
 
-//Close should be called as a deferred method after Initialize
+// Close should be called as a deferred method after Initialize
 func Close() {
 	for _, e := range currentElephants {
 		close(e.channel)
@@ -55,7 +55,7 @@ func Close() {
 	learntTypes = nil
 }
 
-//GetElephant returns a valid elephant for the required context
+// GetElephant returns a valid elephant for the required context
 func GetElephant(context string) (e *Elephant, err error) {
 	if db == nil {
 		return nil, fmt.Errorf("No database initialized")
@@ -75,32 +75,32 @@ func GetElephant(context string) (e *Elephant, err error) {
 	return
 }
 
-//Retrieve gets one element from a specific type filtering by key
-//Returns the element if found and nil if not
+// Retrieve gets one element from a specific type filtering by key
+// Returns the element if found and nil if not
 func (e *Elephant) Retrieve(inputType reflect.Type, key int64) interface{} {
 	action := newInternalAction(actionRetrieve, inputType, key)
 	e.channel <- action
 	return <-action.output
 }
 
-//RetrieveBy gets one element from a specific type filtering by other attribute
-//Returns the element if found and nil if parameters are incorrect or the element is not found
+// RetrieveBy gets one element from a specific type filtering by other attribute
+// Returns the element if found and nil if parameters are incorrect or the element is not found
 func (e *Elephant) RetrieveBy(inputType reflect.Type, attribute string, input interface{}) interface{} {
 	action := newInternalAction(actionRetrieveBy, inputType, attribute, input)
 	e.channel <- action
 	return <-action.output
 }
 
-//RetrieveAll gets all elements with a specific type
-//Returns a map with all elements. It will be empty if there are no elements
+// RetrieveAll gets all elements with a specific type
+// Returns a map with all elements. It will be empty if there are no elements
 func (e *Elephant) RetrieveAll(inputType reflect.Type) map[int64]interface{} {
 	action := newInternalAction(actionRetrieveAll, inputType, nil)
 	e.channel <- action
 	return (<-action.output).(map[int64]interface{})
 }
 
-//Remove deletes one element from the database
-//Returns err if the object does not exist
+// Remove deletes one element from the database
+// Returns err if the object does not exist
 func (e *Elephant) Remove(inputType reflect.Type, key int64) error {
 	action := newInternalAction(actionRemove, inputType, key)
 	e.channel <- action
@@ -111,14 +111,11 @@ func (e *Elephant) Remove(inputType reflect.Type, key int64) error {
 	return nil
 }
 
-//Update modifies an element on the database
-func (e *Elephant) Update(inputType reflect.Type, key int64, input interface{}) error {
-	originalKey, err := getKey(inputType, input)
+// Update modifies an element on the database
+func (e *Elephant) Update(inputType reflect.Type, input interface{}) error {
+	_, err := getKey(inputType, input)
 	if err != nil {
 		return err
-	}
-	if originalKey != key {
-		return fmt.Errorf("Key changes are not supported")
 	}
 	action := newInternalAction(actionUpdate, inputType, input)
 	e.channel <- action
@@ -129,8 +126,8 @@ func (e *Elephant) Update(inputType reflect.Type, key int64, input interface{}) 
 	return nil
 }
 
-//Create adds one element to the database
-//If the key attribute value is 0, a new one will be assigned
+// Create adds one element to the database
+// If the key attribute value is 0, a new one will be assigned
 func (e *Elephant) Create(inputType reflect.Type, input interface{}) (int64, error) {
 	action := newInternalAction(actionCreate, inputType, input)
 	e.channel <- action
@@ -141,22 +138,22 @@ func (e *Elephant) Create(inputType reflect.Type, input interface{}) (int64, err
 	return 0, output.(error)
 }
 
-//Exists check if one key is in use in the database
+// Exists check if one key is in use in the database
 func (e *Elephant) Exists(inputType reflect.Type, key int64) bool {
 	action := newInternalAction(actionExists, inputType, key)
 	e.channel <- action
 	return (<-action.output).(bool)
 }
 
-//ExistsBy gets one element from a specific type filtering by other attribute
-//Returns true if found and false if parameters are incorrect or the element is not found
+// ExistsBy gets one element from a specific type filtering by other attribute
+// Returns true if found and false if parameters are incorrect or the element is not found
 func (e *Elephant) ExistsBy(inputType reflect.Type, attribute string, input interface{}) bool {
 	action := newInternalAction(actionExistsBy, inputType, attribute, input)
 	e.channel <- action
 	return (<-action.output).(bool)
 }
 
-//NextID gives an empty id to create a new entry
+// NextID gives an empty id to create a new entry
 func (e *Elephant) NextID(inputType reflect.Type) int64 {
 	action := newInternalAction(actionNextID, inputType)
 	e.channel <- action

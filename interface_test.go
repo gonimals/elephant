@@ -7,6 +7,34 @@ import (
 	"testing"
 )
 
+func TestReuseDB(t *testing.T) {
+	os.Remove(temporaryDB)
+	err := Initialize("sqlite3://" + temporaryDB)
+	if err != nil {
+		t.Error("Initialization failed", err)
+	}
+	structCheckType := reflect.TypeOf((*structCheck)(nil))
+	var structCheckInstance = &structCheck{
+		Myint64:  3,
+		Mystring: "testing3",
+		Myint:    987,
+		Mybool:   false}
+
+	if _, err = MainContext.Create(structCheckType, structCheckInstance); err != nil {
+		t.Error("Creation failed")
+	}
+	Close()
+	err = Initialize("sqlite3://" + temporaryDB)
+	if err != nil {
+		t.Error("Renitialization failed", err)
+	}
+	retrievedStruct := MainContext.RetrieveBy(structCheckType, "Mystring", structCheckInstance.Mystring)
+	if retrievedStruct.(*structCheck).Myint != structCheckInstance.Myint {
+		t.Error("Retrieved instance's Myint and the original one should be equal")
+	}
+	Close()
+}
+
 func TestCorrectFunctions(t *testing.T) {
 	os.Remove(temporaryDB)
 	err := Initialize("sqlite3://" + temporaryDB)
@@ -32,14 +60,22 @@ func TestCorrectFunctions(t *testing.T) {
 		Mystring: "testing",
 		Myint:    234,
 		Mybool:   true})
+	updateTest := &structCheck{
+		Myint64:  1,
+		Mystring: "testingUpdate",
+		Myint:    2345,
+		Mybool:   false}
 
+	if _, err = MainContext.Create(structCheckType, *structCheckInstance); err == nil {
+		t.Error("Creation of non pointer struct should fail")
+	}
 	if _, err = MainContext.Create(structCheckType, structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
-	if MainContext.Retrieve(structCheckType, structCheckInstance.Myint64) != structCheckInstance {
+	if !compareInstances(MainContext.Retrieve(structCheckType, structCheckInstance.Myint64), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
-	if MainContext.RetrieveBy(structCheckType, "Mystring", structCheckInstance.Mystring) != structCheckInstance {
+	if !compareInstances(MainContext.RetrieveBy(structCheckType, "Mystring", structCheckInstance.Mystring), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
 	if MainContext.RetrieveBy(structCheckType, "unexistent", nil) != nil {
@@ -47,6 +83,13 @@ func TestCorrectFunctions(t *testing.T) {
 	}
 	if MainContext.RetrieveBy(structCheckType, "Mystring", "unexistent") != nil {
 		t.Error("Retrieved instance should be nil")
+	}
+	if MainContext.Update(structCheckType, updateTest) != nil {
+		t.Error("Update without errors should be nil")
+	}
+	updateTest.Myint64 = 5
+	if MainContext.Update(structCheckType, updateTest) == nil {
+		t.Error("Update of unexistent element should not be nil")
 	}
 	err = MainContext.Remove(structCheckType, 1000)
 	if err == nil {

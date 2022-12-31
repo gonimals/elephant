@@ -14,7 +14,7 @@ type internalAction struct {
 	output    chan interface{}
 }
 
-//internalAction codes
+// internalAction codes
 const (
 	actionRetrieve = iota
 	actionRetrieveBy
@@ -41,13 +41,7 @@ func (e *Elephant) execManageType(inputType reflect.Type) {
 	}
 	e.data[inputType] = make(map[int64]interface{})
 	for id, value := range data {
-		instance := reflect.New(inputType).Interface()
-		err := json.Unmarshal([]byte(value), instance)
-		if err != nil {
-			log.Println("Can't unmarshall this value:", value)
-			log.Fatalln(err)
-		}
-		e.data[inputType][int64(id)] = instance
+		e.data[inputType][int64(id)] = loadObjectFromJson(inputType, []byte(value))
 	}
 }
 
@@ -96,7 +90,7 @@ func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (outpu
 	} else if e.data[inputType][key] != nil {
 		return fmt.Errorf("elephant: trying to create an object with id in use")
 	}
-	e.data[inputType][key] = object
+	e.data[inputType][key] = copyEntireObject(object)
 	objectString, err := json.Marshal(object)
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
@@ -113,7 +107,10 @@ func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err e
 	if err != nil {
 		return
 	}
-	oldObject := e.data[inputType][key]
+	oldObject, existingObject := e.data[inputType][key]
+	if !existingObject {
+		return fmt.Errorf("Trying to update unexistent object")
+	}
 	// e.data[inputType][key] = object
 	objectString, err := json.Marshal(object)
 	if err != nil {
