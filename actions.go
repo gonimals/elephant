@@ -123,12 +123,12 @@ func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err e
 	}
 	oldObject, existingObject := e.data[inputType][key]
 	if !existingObject {
-		return fmt.Errorf("Trying to update unexistent object")
+		return fmt.Errorf("elephant: trying to update unexistent object")
 	}
 	// e.data[inputType][key] = object
 	objectString, err := json.Marshal(object)
 	if err != nil {
-		log.Fatalln("Can't convert object to json:", object)
+		log.Fatalln("elephant: can't convert object to json:", object)
 	}
 	err = db.dbUpdate(e.getTableName(inputType), key, string(objectString))
 	if err != nil {
@@ -159,7 +159,7 @@ func (e *Elephant) execNextID(inputType reflect.Type) (output int64) {
 }
 
 func (e *Elephant) mainRoutine() {
-	for true {
+	for {
 		action := <-e.channel
 		if action == nil {
 			//Received nil action. Shutting down mainRoutine

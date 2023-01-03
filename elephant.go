@@ -55,10 +55,18 @@ func examineType(input reflect.Type) (output *learntType, err error) {
 			tag := field.Tag.Get("db")
 			if tag == "key" {
 				output.key = field.Name
+				if field.Type.Kind() != reflect.Int64 {
+					return nil, fmt.Errorf("%s has a parameter with the annotation `db:\"key\"` which is not an int64",
+						input.String())
+				}
 			} else if tag == "update" {
 				output.updates[field.Name] = struct{}{}
 			}
 		}
+	}
+	if output.key == "" {
+		return nil, fmt.Errorf("%s hasn't got an int64 parameter with the annotation `db:\"key\"`",
+			input.String())
 	}
 	learntTypes[input] = output
 	return
@@ -71,7 +79,7 @@ func getKey(input interface{}) (output int64, err error) {
 		return 0, err
 	}
 	if reflect.ValueOf(input).IsNil() {
-		return 0, fmt.Errorf("No nil key creation allowed")
+		return 0, fmt.Errorf("no nil key creation allowed")
 	}
 	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).Int()
 	return

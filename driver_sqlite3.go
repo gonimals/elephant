@@ -10,22 +10,22 @@ import (
 	_ "github.com/mattn/go-sqlite3" //Add support for sqlite3 db
 )
 
-//maxRegexLength decides the maximum length for any string checked with alphanumericRegexp
+// maxRegexLength decides the maximum length for any string checked with alphanumericRegexp
 const maxRegexLength = "40"
 
-//Regular expression used to check that no SQL injection is produced
+// Regular expression used to check that no SQL injection is produced
 var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + ContextSymbol + "]{1," + maxRegexLength + "}$")
 
-//These are error strings returned by the driver
+// These are error strings returned by the driver
 const errorSQLNoSuchTable = "no such table: "
 const errorSQLNoRowsInResultSet = "sql: no rows in result set"
 const errorPossibleSQLi = " could be a SQL injection attack"
 
-//These are the sqlite table creation statements
+// These are the sqlite table creation statements
 const sqlite3CheckTable = "select id from %s limit 1"
 const sqlite3CreateTable = "create table '%s' ( id sqlite3_int64 primary key, value text )"
 
-//These are the statement names
+// These are the statement names
 const (
 	stmtRetrieve = iota
 	stmtRetrieveAll
@@ -34,10 +34,10 @@ const (
 	stmtUpdate
 )
 
-//creationMap is used just
+// creationMap is used just
 var sqliteCreationMap map[int]string
 
-//This struct stores data needed to work with a struct in this DB
+// This struct stores data needed to work with a struct in this DB
 type typeHandler struct {
 	name  string
 	stmts map[int]*sql.Stmt
@@ -72,14 +72,6 @@ func (d *driverSqlite3) dbClose() {
 	d.db.Close()
 }
 
-func cancelTypeHandlerCreation(th *typeHandler) *typeHandler {
-	for _, stmt := range th.stmts {
-		stmt.Close()
-	}
-	th.stmts = nil
-	return nil
-}
-
 // createTypeHandler just populates the struct with the required SQL statements
 func (d *driverSqlite3) createTypeHandler(input string) (th *typeHandler, err error) {
 	th = new(typeHandler)
@@ -88,14 +80,18 @@ func (d *driverSqlite3) createTypeHandler(input string) (th *typeHandler, err er
 	for i := stmtRetrieve; i <= stmtUpdate; i++ {
 		th.stmts[i], err = d.db.Prepare(fmt.Sprintf(sqliteCreationMap[i], input))
 		if err != nil {
-			log.Fatalln(err)
-			return cancelTypeHandlerCreation(th), err
+			for _, stmt := range th.stmts {
+				stmt.Close()
+			}
+			th.stmts = nil
+			log.Println(err)
+			return nil, err
 		}
 	}
 	return
 }
 
-//ensureTableIsHandled checks if the table is already handled by the driver and handles it if not, checking for SQLi at source code
+// ensureTableIsHandled checks if the table is already handled by the driver and handles it if not, checking for SQLi at source code
 func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 	th = d.checkedTypes[input]
 	if th != nil {

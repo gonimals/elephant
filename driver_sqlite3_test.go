@@ -58,48 +58,45 @@ func TestDriverSqlite3(t *testing.T) {
 
 }
 
-//This function is just an sqlite3 usage example
-func testSqlite3(t *testing.T) {
+// This function is just an sqlite3 usage example
+func TestSqlite3(t *testing.T) {
+	os.Remove(temporaryDB)
 	// Connect
 	db, err := sql.Open("sqlite3", temporaryDB)
 	if err != nil {
-		log.Fatal(err)
+		t.Error("Can't open the database", err)
+		return
 	}
 	defer db.Close()
 
-	// Drop table
-	sqlStmt := `drop table foo`
-	_, err = db.Exec(sqlStmt)
-	if err != nil {
-		//log.Println("Table foo did not exist")
-		//log.Printf("%q: %s\n", err, sqlStmt)
-	}
-
 	// Create table
-	sqlStmt = `
+	sqlStmt := `
 	create table foo (id sqlite3_int64 not null primary key, name text);
 	delete from foo;
 	`
 	_, err = db.Exec(sqlStmt)
 	if err != nil {
-		log.Printf("%q: %s\n", err, sqlStmt)
+		t.Error("Error creating table", err, "\n", sqlStmt)
 		return
 	}
 
 	// Insert transaction
 	tx, err := db.Begin()
 	if err != nil {
-		log.Fatal(err)
+		t.Error("Error beginning transaction", err)
+		return
 	}
 	stmt, err := tx.Prepare("insert into foo(id, name) values(?, ?)")
 	if err != nil {
-		log.Fatal(err)
+		t.Error("Error preparing statement", err)
+		return
 	}
 	defer stmt.Close()
 	for i := 0; i < 100; i++ {
 		_, err = stmt.Exec(int64(i), fmt.Sprintf("My name is %03d number", i))
 		if err != nil {
-			log.Fatal(err)
+			t.Error("Error inserting value", i, err)
+			return
 		}
 	}
 	tx.Commit()
@@ -118,5 +115,4 @@ func testSqlite3(t *testing.T) {
 
 	// Reset
 	os.Remove(temporaryDB)
-	return
 }

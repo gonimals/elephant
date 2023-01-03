@@ -54,6 +54,12 @@ func compareInstances(first, second interface{}) bool {
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", first)
 	}
-	//fmt.Println(string(string1)+"\n"+string(string2)+"\n", bytes.Compare(string1, string2) == 0)
-	return bytes.Compare(string1, string2) == 0
+	return bytes.Equal(string1, string2)
+}
+
+// checkInitialization
+func checkInitialization(e *Elephant) {
+	if e == nil {
+		log.Panic("Trying to use an uninitialized instance")
+	}
 }

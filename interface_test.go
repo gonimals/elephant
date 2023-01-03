@@ -72,6 +72,9 @@ func TestCorrectFunctions(t *testing.T) {
 	if _, err = MainContext.Create(structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
+	if _, err = MainContext.Create(new(failingStructCheck)); err == nil {
+		t.Error("Creation of incorrect struct should fail")
+	}
 	if !compareInstances(MainContext.Retrieve(structCheckType, structCheckInstance.Myint64), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}

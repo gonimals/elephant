@@ -58,7 +58,7 @@ func Close() {
 // GetElephant returns a valid elephant for the required context
 func GetElephant(context string) (e *Elephant, err error) {
 	if db == nil {
-		return nil, fmt.Errorf("No database initialized")
+		return nil, fmt.Errorf("no database initialized")
 	}
 	e = currentElephants[context]
 	if e == nil {
@@ -78,6 +78,7 @@ func GetElephant(context string) (e *Elephant, err error) {
 // Retrieve gets one element from a specific type filtering by key
 // Returns the element if found and nil if not
 func (e *Elephant) Retrieve(inputType reflect.Type, key int64) interface{} {
+
 	action := newInternalAction(actionRetrieve, inputType, key)
 	e.channel <- action
 	return <-action.output
@@ -86,6 +87,7 @@ func (e *Elephant) Retrieve(inputType reflect.Type, key int64) interface{} {
 // RetrieveBy gets one element from a specific type filtering by other attribute
 // Returns the element if found and nil if parameters are incorrect or the element is not found
 func (e *Elephant) RetrieveBy(inputType reflect.Type, attribute string, input interface{}) interface{} {
+	checkInitialization(e)
 	action := newInternalAction(actionRetrieveBy, inputType, attribute, input)
 	e.channel <- action
 	return <-action.output
@@ -94,6 +96,7 @@ func (e *Elephant) RetrieveBy(inputType reflect.Type, attribute string, input in
 // RetrieveAll gets all elements with a specific type
 // Returns a map with all elements. It will be empty if there are no elements
 func (e *Elephant) RetrieveAll(inputType reflect.Type) map[int64]interface{} {
+	checkInitialization(e)
 	action := newInternalAction(actionRetrieveAll, inputType, nil)
 	e.channel <- action
 	return (<-action.output).(map[int64]interface{})
@@ -102,6 +105,7 @@ func (e *Elephant) RetrieveAll(inputType reflect.Type) map[int64]interface{} {
 // Remove deletes one element from the database
 // Returns err if the object does not exist
 func (e *Elephant) Remove(input interface{}) error {
+	checkInitialization(e)
 	action := newInternalAction(actionRemove, reflect.TypeOf(input), input)
 	e.channel <- action
 	output := <-action.output
@@ -114,6 +118,7 @@ func (e *Elephant) Remove(input interface{}) error {
 // RemoveByKey deletes one element from the database
 // Returns err if the object does not exist
 func (e *Elephant) RemoveByKey(inputType reflect.Type, key int64) error {
+	checkInitialization(e)
 	action := newInternalAction(actionRemoveByKey, inputType, key)
 	e.channel <- action
 	output := <-action.output
@@ -125,10 +130,7 @@ func (e *Elephant) RemoveByKey(inputType reflect.Type, key int64) error {
 
 // Update modifies an element on the database
 func (e *Elephant) Update(input interface{}) error {
-	/*_, err := getKey(input)
-	if err != nil {
-		return err
-	}*/
+	checkInitialization(e)
 	action := newInternalAction(actionUpdate, reflect.TypeOf(input), input)
 	e.channel <- action
 	output := <-action.output
@@ -141,6 +143,7 @@ func (e *Elephant) Update(input interface{}) error {
 // Create adds one element to the database
 // If the key attribute value is 0, a new one will be assigned
 func (e *Elephant) Create(input interface{}) (int64, error) {
+	checkInitialization(e)
 	action := newInternalAction(actionCreate, reflect.TypeOf(input), input)
 	e.channel <- action
 	output := <-action.output
@@ -152,6 +155,7 @@ func (e *Elephant) Create(input interface{}) (int64, error) {
 
 // Exists check if one key is in use in the database
 func (e *Elephant) Exists(inputType reflect.Type, key int64) bool {
+	checkInitialization(e)
 	action := newInternalAction(actionExists, inputType, key)
 	e.channel <- action
 	return (<-action.output).(bool)
@@ -160,6 +164,7 @@ func (e *Elephant) Exists(inputType reflect.Type, key int64) bool {
 // ExistsBy gets one element from a specific type filtering by other attribute
 // Returns true if found and false if parameters are incorrect or the element is not found
 func (e *Elephant) ExistsBy(inputType reflect.Type, attribute string, input interface{}) bool {
+	checkInitialization(e)
 	action := newInternalAction(actionExistsBy, inputType, attribute, input)
 	e.channel <- action
 	return (<-action.output).(bool)
@@ -167,6 +172,7 @@ func (e *Elephant) ExistsBy(inputType reflect.Type, attribute string, input inte
 
 // NextID gives an empty id to create a new entry
 func (e *Elephant) NextID(inputType reflect.Type) int64 {
+	checkInitialization(e)
 	action := newInternalAction(actionNextID, inputType)
 	e.channel <- action
 	return (<-action.output).(int64)
