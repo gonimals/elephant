@@ -101,8 +101,20 @@ func (e *Elephant) RetrieveAll(inputType reflect.Type) map[int64]interface{} {
 
 // Remove deletes one element from the database
 // Returns err if the object does not exist
-func (e *Elephant) Remove(inputType reflect.Type, key int64) error {
-	action := newInternalAction(actionRemove, inputType, key)
+func (e *Elephant) Remove(input interface{}) error {
+	action := newInternalAction(actionRemove, reflect.TypeOf(input), input)
+	e.channel <- action
+	output := <-action.output
+	if output != nil {
+		return output.(error)
+	}
+	return nil
+}
+
+// RemoveByKey deletes one element from the database
+// Returns err if the object does not exist
+func (e *Elephant) RemoveByKey(inputType reflect.Type, key int64) error {
+	action := newInternalAction(actionRemoveByKey, inputType, key)
 	e.channel <- action
 	output := <-action.output
 	if output != nil {
@@ -112,12 +124,12 @@ func (e *Elephant) Remove(inputType reflect.Type, key int64) error {
 }
 
 // Update modifies an element on the database
-func (e *Elephant) Update(inputType reflect.Type, input interface{}) error {
-	_, err := getKey(inputType, input)
+func (e *Elephant) Update(input interface{}) error {
+	/*_, err := getKey(input)
 	if err != nil {
 		return err
-	}
-	action := newInternalAction(actionUpdate, inputType, input)
+	}*/
+	action := newInternalAction(actionUpdate, reflect.TypeOf(input), input)
 	e.channel <- action
 	output := <-action.output
 	if output != nil {
@@ -128,8 +140,8 @@ func (e *Elephant) Update(inputType reflect.Type, input interface{}) error {
 
 // Create adds one element to the database
 // If the key attribute value is 0, a new one will be assigned
-func (e *Elephant) Create(inputType reflect.Type, input interface{}) (int64, error) {
-	action := newInternalAction(actionCreate, inputType, input)
+func (e *Elephant) Create(input interface{}) (int64, error) {
+	action := newInternalAction(actionCreate, reflect.TypeOf(input), input)
 	e.channel <- action
 	output := <-action.output
 	if reflect.TypeOf(output).Kind() == reflect.Int64 {

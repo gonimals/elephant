@@ -21,19 +21,24 @@ const (
 	actionRetrieveAll
 	actionUpdate
 	actionRemove
+	actionRemoveByKey
 	actionCreate
 	actionExists
 	actionExistsBy
 	actionNextID
 )
 
-func (e *Elephant) execManageType(inputType reflect.Type) {
+func (e *Elephant) execManageType(inputType reflect.Type) error {
 	if e.managedTypes[inputType] {
-		return
+		return nil
 	}
 	// Type is not managed. Start the managing actions
+	learntType, err := examineType(inputType)
+	if err != nil {
+		return err
+	}
 	e.managedTypes[inputType] = true
-	e.learntTypes[inputType] = examineType(inputType)
+	e.learntTypes[inputType] = learntType
 
 	data, err := db.dbRetrieveAll(e.getTableName(inputType))
 	if err != nil {
@@ -43,6 +48,7 @@ func (e *Elephant) execManageType(inputType reflect.Type) {
 	for id, value := range data {
 		e.data[inputType][int64(id)] = loadObjectFromJson(inputType, []byte(value))
 	}
+	return nil
 }
 
 func (e *Elephant) execRetrieve(inputType reflect.Type, key int64) (output interface{}) {
@@ -69,7 +75,15 @@ func (e *Elephant) execRetrieveAll(inputType reflect.Type) (output interface{}) 
 	return e.data[inputType]
 }
 
-func (e *Elephant) execRemove(inputType reflect.Type, key int64) (err error) {
+func (e *Elephant) execRemove(inputType reflect.Type, input interface{}) error {
+	key, err := getKey(input)
+	if err != nil {
+		return fmt.Errorf("elephant: cannot get id from element")
+	}
+	return e.execRemoveByKey(inputType, key)
+}
+
+func (e *Elephant) execRemoveByKey(inputType reflect.Type, key int64) (err error) {
 	if !e.execExists(inputType, key) {
 		return fmt.Errorf("elephant: there is not element with such id")
 	}
@@ -81,9 +95,9 @@ func (e *Elephant) execRemove(inputType reflect.Type, key int64) (err error) {
 }
 
 func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
-	key, err := getKey(inputType, object)
+	key, err := getKey(object)
 	if err != nil {
-		return
+		return err
 	} else if key == 0 {
 		key = e.execNextID(inputType)
 		setKey(inputType, object, key)
@@ -103,7 +117,7 @@ func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (outpu
 }
 
 func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err error) {
-	key, err := getKey(inputType, object)
+	key, err := getKey(object)
 	if err != nil {
 		return
 	}
@@ -134,7 +148,7 @@ func (e *Elephant) execExists(inputType reflect.Type, key int64) (output bool) {
 }
 
 func (e *Elephant) execExistsBy(inputType reflect.Type, attribute string, object interface{}) bool {
-	return e.execRetrieveBy(inputType, attribute, object) == nil
+	return e.execRetrieveBy(inputType, attribute, object) != nil
 }
 
 func (e *Elephant) execNextID(inputType reflect.Type) (output int64) {
@@ -151,7 +165,11 @@ func (e *Elephant) mainRoutine() {
 			//Received nil action. Shutting down mainRoutine
 			break
 		}
-		e.execManageType(action.inputType)
+		err := e.execManageType(action.inputType)
+		if err != nil {
+			action.output <- err
+			continue
+		}
 		switch action.code {
 		case actionRetrieve:
 			action.output <- e.execRetrieve(action.inputType, action.object[0].(int64))
@@ -160,7 +178,9 @@ func (e *Elephant) mainRoutine() {
 		case actionRetrieveBy:
 			action.output <- e.execRetrieveBy(action.inputType, action.object[0].(string), action.object[1])
 		case actionRemove:
-			action.output <- e.execRemove(action.inputType, action.object[0].(int64))
+			action.output <- e.execRemove(action.inputType, action.object[0])
+		case actionRemoveByKey:
+			action.output <- e.execRemoveByKey(action.inputType, action.object[0].(int64))
 		case actionCreate:
 			action.output <- e.execCreate(action.inputType, action.object[0])
 		case actionUpdate:

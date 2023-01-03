@@ -20,7 +20,7 @@ func TestReuseDB(t *testing.T) {
 		Myint:    987,
 		Mybool:   false}
 
-	if _, err = MainContext.Create(structCheckType, structCheckInstance); err != nil {
+	if _, err = MainContext.Create(structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
 	Close()
@@ -50,12 +50,12 @@ func TestCorrectFunctions(t *testing.T) {
 		Myint:    987,
 		Mybool:   false}
 
-	MainContext.Create(structCheckType, &structCheck{
+	MainContext.Create(&structCheck{
 		Myint64:  0,
 		Mystring: "testing",
 		Myint:    234,
 		Mybool:   true})
-	MainContext.Create(structCheckType, &structCheck{
+	MainContext.Create(&structCheck{
 		Myint64:  1,
 		Mystring: "testing",
 		Myint:    234,
@@ -66,10 +66,10 @@ func TestCorrectFunctions(t *testing.T) {
 		Myint:    2345,
 		Mybool:   false}
 
-	if _, err = MainContext.Create(structCheckType, *structCheckInstance); err == nil {
+	if _, err = MainContext.Create(*structCheckInstance); err == nil {
 		t.Error("Creation of non pointer struct should fail")
 	}
-	if _, err = MainContext.Create(structCheckType, structCheckInstance); err != nil {
+	if _, err = MainContext.Create(structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
 	if !compareInstances(MainContext.Retrieve(structCheckType, structCheckInstance.Myint64), structCheckInstance) {
@@ -84,14 +84,14 @@ func TestCorrectFunctions(t *testing.T) {
 	if MainContext.RetrieveBy(structCheckType, "Mystring", "unexistent") != nil {
 		t.Error("Retrieved instance should be nil")
 	}
-	if MainContext.Update(structCheckType, updateTest) != nil {
+	if MainContext.Update(updateTest) != nil {
 		t.Error("Update without errors should be nil")
 	}
 	updateTest.Myint64 = 5
-	if MainContext.Update(structCheckType, updateTest) == nil {
+	if MainContext.Update(updateTest) == nil {
 		t.Error("Update of unexistent element should not be nil")
 	}
-	err = MainContext.Remove(structCheckType, 1000)
+	err = MainContext.RemoveByKey(structCheckType, 1000)
 	if err == nil {
 		t.Error("Fake deletion didn't give any error")
 	}
@@ -104,21 +104,37 @@ func TestCorrectFunctions(t *testing.T) {
 	if MainContext.Exists(structCheckType, 2) {
 		t.Error("Exists returning true on non-existent entry")
 	}
-	err = MainContext.Remove(structCheckType, structCheckInstance.Myint64)
+	if MainContext.ExistsBy(structCheckType, "Mystring", "unexistent") {
+		t.Errorf("Exists returning true on non-existent entry")
+	}
+	err = MainContext.RemoveByKey(structCheckType, structCheckInstance.Myint64)
 	if err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
 	if len(MainContext.RetrieveAll(structCheckType)) != 2 {
+		t.Error("Entire instances count differs after deletion by key")
+		for key, value := range MainContext.data[structCheckType] {
+			log.Println(key, value)
+		}
+	}
+	updateTest.Myint64 = 1
+	if MainContext.Remove(updateTest) != nil {
+		t.Error("Remove operation failed, when should be correct:", err)
+	}
+	if len(MainContext.RetrieveAll(structCheckType)) != 1 {
 		t.Error("Entire instances count differs after deletion")
 		for key, value := range MainContext.data[structCheckType] {
 			log.Println(key, value)
 		}
 	}
+	if MainContext.Remove(updateTest) == nil {
+		t.Error("Remove operation successful, when should be incorrect:", err)
+	}
 	customContext, err := GetElephant("customContext")
 	if err != nil {
 		t.Error("Error getting custom context", err)
 	}
-	if _, err = customContext.Create(structCheckType, &structCheck{
+	if _, err = customContext.Create(&structCheck{
 		Myint64:  0,
 		Mystring: `[ {name: 'item', sort: [0 ,0] } ]`,
 	}); err != nil {

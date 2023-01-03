@@ -30,9 +30,10 @@ var currentElephants map[string]*Elephant
 var learntTypes map[reflect.Type]*learntType
 
 // examineType will check that the type can be transformed into JSON and has an Id parameter
-func examineType(input reflect.Type) (output *learntType) {
+func examineType(input reflect.Type) (output *learntType, err error) {
 	if input.Kind() != reflect.Ptr || input.Elem().Kind() != reflect.Struct {
-		panic(fmt.Errorf(input.String() + " is not a pointer to struct"))
+		return nil, fmt.Errorf("%s is not a pointer to struct. Kind: %s",
+			input.String(), input.Kind().String())
 	}
 	input = input.Elem()
 	output = learntTypes[input]
@@ -64,10 +65,10 @@ func examineType(input reflect.Type) (output *learntType) {
 }
 
 // Returns the key from the input ptr object
-func getKey(inputType reflect.Type, input interface{}) (output int64, err error) {
-	typeDescriptor := examineType(inputType)
-	if reflect.TypeOf(input) != inputType {
-		return 0, fmt.Errorf("The input object should match with the inputType")
+func getKey(input interface{}) (output int64, err error) {
+	typeDescriptor, err := examineType(reflect.TypeOf(input))
+	if err != nil {
+		return 0, err
 	}
 	if reflect.ValueOf(input).IsNil() {
 		return 0, fmt.Errorf("No nil key creation allowed")
@@ -77,7 +78,10 @@ func getKey(inputType reflect.Type, input interface{}) (output int64, err error)
 }
 
 func setKey(inputType reflect.Type, input interface{}, key int64) {
-	typeDescriptor := examineType(inputType)
+	typeDescriptor, err := examineType(inputType)
+	if err != nil {
+		panic(err)
+	}
 	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).SetInt(key)
 }
 
@@ -85,6 +89,10 @@ func (e *Elephant) getTableName(inputType reflect.Type) (output string) {
 	if e.Context != "" {
 		output = e.Context + ContextSymbol
 	}
-	output += examineType(inputType).name
+	typeDescriptor, err := examineType(inputType)
+	if err != nil {
+		panic(err)
+	}
+	output += typeDescriptor.name
 	return
 }
