@@ -35,6 +35,25 @@ func TestReuseDB(t *testing.T) {
 	Close()
 }
 
+/*
+func TestStringKey(t *testing.T) {
+	os.Remove(temporaryDB)
+	err := Initialize("sqlite3://" + temporaryDB)
+	if err != nil {
+		t.Error("Initialization failed", err)
+	}
+	defer Close()
+
+	key, err := MainContext.Create(&stringStructCheck{
+		Mystring: "Testing",
+		Mydate:   0,
+	})
+	if err != nil || key.(string) != "Testing" {
+		t.Error("Creation of struct with string key should be allowed")
+	}
+}
+*/
+
 func TestCorrectFunctions(t *testing.T) {
 	os.Remove(temporaryDB)
 	err := Initialize("sqlite3://" + temporaryDB)

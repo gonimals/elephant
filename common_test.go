@@ -15,3 +15,10 @@ type failingStructCheck struct {
 	Myint64  int64
 	Mybool   bool
 }
+
+/*
+type stringStructCheck struct {
+	Mystring string `db:"key"`
+	Mydate   int
+}
+*/
