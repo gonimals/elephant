@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 )
 
 type internalAction struct {
@@ -44,14 +45,14 @@ func (e *Elephant) execManageType(inputType reflect.Type) error {
 	if err != nil {
 		log.Fatalln("Error reading data from database:", err)
 	}
-	e.data[inputType] = make(map[int64]interface{})
-	for id, value := range data {
-		e.data[inputType][int64(id)] = loadObjectFromJson(inputType, []byte(value))
+	e.data[inputType] = make(map[string]interface{})
+	for key, value := range data {
+		e.data[inputType][key] = loadObjectFromJson(inputType, []byte(value))
 	}
 	return nil
 }
 
-func (e *Elephant) execRetrieve(inputType reflect.Type, key int64) (output interface{}) {
+func (e *Elephant) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
 	return e.data[inputType][key]
 }
 
@@ -83,7 +84,7 @@ func (e *Elephant) execRemove(inputType reflect.Type, input interface{}) error {
 	return e.execRemoveByKey(inputType, key)
 }
 
-func (e *Elephant) execRemoveByKey(inputType reflect.Type, key int64) (err error) {
+func (e *Elephant) execRemoveByKey(inputType reflect.Type, key string) (err error) {
 	if !e.execExists(inputType, key) {
 		return fmt.Errorf("elephant: there is not element with such id")
 	}
@@ -98,7 +99,7 @@ func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (outpu
 	key, err := getKey(object)
 	if err != nil {
 		return err
-	} else if key == 0 {
+	} else if key == "" {
 		key = e.execNextID(inputType)
 		setKey(inputType, object, key)
 	} else if e.data[inputType][key] != nil {
@@ -142,7 +143,7 @@ func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err e
 	return
 }
 
-func (e *Elephant) execExists(inputType reflect.Type, key int64) (output bool) {
+func (e *Elephant) execExists(inputType reflect.Type, key string) (output bool) {
 	_, output = e.data[inputType][key]
 	return
 }
@@ -151,11 +152,12 @@ func (e *Elephant) execExistsBy(inputType reflect.Type, attribute string, object
 	return e.execRetrieveBy(inputType, attribute, object) != nil
 }
 
-func (e *Elephant) execNextID(inputType reflect.Type) (output int64) {
+func (e *Elephant) execNextID(inputType reflect.Type) string {
 	//TODO: Yes, this is not the best way to search
-	for output = 0; e.data[inputType][output] != nil; output++ {
+	var outputInt int
+	for outputInt = 0; e.data[inputType][strconv.Itoa(outputInt)] != nil; outputInt++ {
 	}
-	return
+	return strconv.Itoa(outputInt)
 }
 
 func (e *Elephant) mainRoutine() {
@@ -172,7 +174,7 @@ func (e *Elephant) mainRoutine() {
 		}
 		switch action.code {
 		case actionRetrieve:
-			action.output <- e.execRetrieve(action.inputType, action.object[0].(int64))
+			action.output <- e.execRetrieve(action.inputType, action.object[0].(string))
 		case actionRetrieveAll:
 			action.output <- e.execRetrieveAll(action.inputType)
 		case actionRetrieveBy:
@@ -180,13 +182,13 @@ func (e *Elephant) mainRoutine() {
 		case actionRemove:
 			action.output <- e.execRemove(action.inputType, action.object[0])
 		case actionRemoveByKey:
-			action.output <- e.execRemoveByKey(action.inputType, action.object[0].(int64))
+			action.output <- e.execRemoveByKey(action.inputType, action.object[0].(string))
 		case actionCreate:
 			action.output <- e.execCreate(action.inputType, action.object[0])
 		case actionUpdate:
 			action.output <- e.execUpdate(action.inputType, action.object[0])
 		case actionExists:
-			action.output <- e.execExists(action.inputType, action.object[0].(int64))
+			action.output <- e.execExists(action.inputType, action.object[0].(string))
 		case actionExistsBy:
 			action.output <- e.execExistsBy(action.inputType, action.object[0].(string), action.object[1])
 		case actionNextID:

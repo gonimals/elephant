@@ -28,7 +28,7 @@ func TestReuseDB(t *testing.T) {
 	if err != nil {
 		t.Error("Renitialization failed", err)
 	}
-	retrievedStruct := MainContext.RetrieveBy(structCheckType, "Mystring", structCheckInstance.Mystring)
+	retrievedStruct := MainContext.RetrieveBy(structCheckType, "Mybool", structCheckInstance.Mybool)
 	if retrievedStruct.(*structCheck).Myint != structCheckInstance.Myint {
 		t.Error("Retrieved instance's Myint and the original one should be equal")
 	}
@@ -65,22 +65,22 @@ func TestCorrectFunctions(t *testing.T) {
 
 	var structCheckInstance = &structCheck{
 		Myint64:  3,
-		Mystring: "testing3",
+		Mystring: "0",
 		Myint:    987,
 		Mybool:   false}
 
 	MainContext.Create(&structCheck{
 		Myint64:  0,
-		Mystring: "testing",
+		Mystring: "1",
 		Myint:    234,
 		Mybool:   true})
 	MainContext.Create(&structCheck{
 		Myint64:  1,
-		Mystring: "testing",
+		Mystring: "testingUpdate",
 		Myint:    234,
 		Mybool:   true})
 	updateTest := &structCheck{
-		Myint64:  1,
+		Myint64:  5,
 		Mystring: "testingUpdate",
 		Myint:    2345,
 		Mybool:   false}
@@ -94,56 +94,57 @@ func TestCorrectFunctions(t *testing.T) {
 	if _, err = MainContext.Create(new(failingStructCheck)); err == nil {
 		t.Error("Creation of incorrect struct should fail")
 	}
-	if !compareInstances(MainContext.Retrieve(structCheckType, structCheckInstance.Myint64), structCheckInstance) {
+	if !compareInstances(MainContext.Retrieve(structCheckType, structCheckInstance.Mystring), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
-	if !compareInstances(MainContext.RetrieveBy(structCheckType, "Mystring", structCheckInstance.Mystring), structCheckInstance) {
+	if !compareInstances(MainContext.RetrieveBy(structCheckType, "Myint", structCheckInstance.Myint), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
 	if MainContext.RetrieveBy(structCheckType, "unexistent", nil) != nil {
 		t.Error("Retrieved instance should be nil")
 	}
-	if MainContext.RetrieveBy(structCheckType, "Mystring", "unexistent") != nil {
+	if MainContext.RetrieveBy(structCheckType, "Myint", 456) != nil {
 		t.Error("Retrieved instance should be nil")
 	}
 	if MainContext.Update(updateTest) != nil {
 		t.Error("Update without errors should be nil")
 	}
-	updateTest.Myint64 = 5
+	updateTest.Mystring = "testingUpdateModified"
 	if MainContext.Update(updateTest) == nil {
 		t.Error("Update of unexistent element should not be nil")
 	}
-	err = MainContext.RemoveByKey(structCheckType, 1000)
+	err = MainContext.RemoveByKey(structCheckType, "1000")
 	if err == nil {
 		t.Error("Fake deletion didn't give any error")
 	}
-	if len(MainContext.RetrieveAll(structCheckType)) != 3 {
+
+	if allInstances, _ := MainContext.RetrieveAll(structCheckType); len(allInstances) != 3 {
 		t.Error("Entire instances count differs after fake deletion")
 	}
-	if MainContext.NextID(structCheckType) != 2 {
-		t.Error("NextID is not giving the first empty ID")
+	if MainContext.NextID(structCheckType) != "2" {
+		t.Error("NextID is not giving the first empty ID:", MainContext.NextID(structCheckType))
 	}
-	if MainContext.Exists(structCheckType, 2) {
+	if MainContext.Exists(structCheckType, "2") {
 		t.Error("Exists returning true on non-existent entry")
 	}
 	if MainContext.ExistsBy(structCheckType, "Mystring", "unexistent") {
 		t.Errorf("Exists returning true on non-existent entry")
 	}
-	err = MainContext.RemoveByKey(structCheckType, structCheckInstance.Myint64)
+	err = MainContext.RemoveByKey(structCheckType, structCheckInstance.Mystring)
 	if err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
-	if len(MainContext.RetrieveAll(structCheckType)) != 2 {
+	if allInstances, _ := MainContext.RetrieveAll(structCheckType); len(allInstances) != 2 {
 		t.Error("Entire instances count differs after deletion by key")
 		for key, value := range MainContext.data[structCheckType] {
 			log.Println(key, value)
 		}
 	}
-	updateTest.Myint64 = 1
+	updateTest.Mystring = "testingUpdate"
 	if MainContext.Remove(updateTest) != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
-	if len(MainContext.RetrieveAll(structCheckType)) != 1 {
+	if allInstances, _ := MainContext.RetrieveAll(structCheckType); len(allInstances) != 1 {
 		t.Error("Entire instances count differs after deletion")
 		for key, value := range MainContext.data[structCheckType] {
 			log.Println(key, value)

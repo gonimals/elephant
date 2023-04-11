@@ -19,37 +19,37 @@ func TestDriverSqlite3(t *testing.T) {
 		t.Error("failed to create a valid db")
 	}
 	defer db.dbClose()
-	db.dbCreate("test_table", 1, "asdfasdf")
+	db.dbCreate("test_table", "1", "asdfasdf")
 	if err != nil {
 		t.Error("simple create operation fails:", err)
 	}
-	output, err := db.dbRetrieve("test_table", 1)
+	output, err := db.dbRetrieve("test_table", "1")
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
 	if output != "asdfasdf" {
 		t.Errorf("retrieved string is not the original")
 	}
-	err = db.dbUpdate("test_table", 1, "fdsafdsa")
+	err = db.dbUpdate("test_table", "1", "fdsafdsa")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
-	err = db.dbUpdate("test_table", 1, "fdsafdsa")
+	err = db.dbUpdate("test_table", "1", "fdsafdsa")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
-	output, err = db.dbRetrieve("test_table", 1)
+	output, err = db.dbRetrieve("test_table", "1")
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
 	if output != "fdsafdsa" {
 		t.Errorf("retrieved string is not the updated one")
 	}
-	err = db.dbRemove("test_table", 1)
+	err = db.dbRemove("test_table", "1")
 	if err != nil {
 		t.Error("simple delete operation fails:", err)
 	}
-	output, err = db.dbRetrieve("test_table", 1)
+	output, err = db.dbRetrieve("test_table", "1")
 	if err == nil {
 		t.Error("retrieve operation of deleted item doesn't give error")
 	} else if output != "" {

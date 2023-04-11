@@ -3,9 +3,9 @@ package elephant
 const temporaryDB = "/tmp/foo.db"
 
 type structCheck struct {
-	Mystring string
+	Mystring string `db:"key"`
 	Myint    int
-	Myint64  int64 `db:"key"`
+	Myint64  int64
 	Mybool   bool
 }
 

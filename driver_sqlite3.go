@@ -23,7 +23,7 @@ const errorPossibleSQLi = " could be a SQL injection attack"
 
 // These are the sqlite table creation statements
 const sqlite3CheckTable = "select id from %s limit 1"
-const sqlite3CreateTable = "create table '%s' ( id sqlite3_int64 primary key, value text )"
+const sqlite3CreateTable = "create table '%s' ( id text primary key, value text )"
 
 // These are the statement names
 const (
@@ -99,7 +99,7 @@ func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 	}
 
 	//Start the handling tasks
-	var testID int64
+	var testID string
 	if !alphanumericRegexp.MatchString(input) {
 		log.Fatal(input + errorPossibleSQLi)
 	}
@@ -123,21 +123,21 @@ func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 	return
 }
 
-func (d *driverSqlite3) dbRetrieve(inputType string, key int64) (output string, err error) {
+func (d *driverSqlite3) dbRetrieve(inputType string, key string) (output string, err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	err = handledType.stmts[stmtRetrieve].QueryRow(key).Scan(&output)
 	return
 }
 
-func (d *driverSqlite3) dbRetrieveAll(inputType string) (output map[int]string, err error) {
+func (d *driverSqlite3) dbRetrieveAll(inputType string) (output map[string]string, err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	rows, err := handledType.stmts[stmtRetrieveAll].Query()
 	if err != nil {
 		return
 	}
-	output = make(map[int]string)
+	output = make(map[string]string)
 	for rows.Next() {
-		var id int
+		var id string
 		var value string
 		err = rows.Scan(&id, &value)
 		if err != nil {
@@ -148,19 +148,19 @@ func (d *driverSqlite3) dbRetrieveAll(inputType string) (output map[int]string, 
 	return
 }
 
-func (d *driverSqlite3) dbRemove(inputType string, key int64) (err error) {
+func (d *driverSqlite3) dbRemove(inputType string, key string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtDelete].Exec(key)
 	return
 }
 
-func (d *driverSqlite3) dbCreate(inputType string, key int64, input string) (err error) {
+func (d *driverSqlite3) dbCreate(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtInsert].Exec(key, input)
 	return
 }
 
-func (d *driverSqlite3) dbUpdate(inputType string, key int64, input string) (err error) {
+func (d *driverSqlite3) dbUpdate(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtUpdate].Exec(input, key)
 	return

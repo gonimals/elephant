@@ -19,11 +19,11 @@ type learntType struct {
 
 type dbDriver interface {
 	dbClose()
-	dbRetrieve(inputType string, key int64) (output string, err error)
-	dbRetrieveAll(inputType string) (output map[int]string, err error)
-	dbCreate(inputType string, key int64, input string) (err error)
-	dbUpdate(inputType string, key int64, input string) (err error)
-	dbRemove(inputType string, key int64) (err error)
+	dbRetrieve(inputType string, key string) (output string, err error)
+	dbRetrieveAll(inputType string) (output map[string]string, err error)
+	dbCreate(inputType string, key string, input string) (err error)
+	dbUpdate(inputType string, key string, input string) (err error)
+	dbRemove(inputType string, key string) (err error)
 }
 
 var currentElephants map[string]*Elephant
@@ -55,8 +55,8 @@ func examineType(input reflect.Type) (output *learntType, err error) {
 			tag := field.Tag.Get("db")
 			if tag == "key" {
 				output.key = field.Name
-				if field.Type.Kind() != reflect.Int64 {
-					return nil, fmt.Errorf("%s has a parameter with the annotation `db:\"key\"` which is not an int64",
+				if field.Type.Kind() != reflect.String {
+					return nil, fmt.Errorf("%s has a parameter with the annotation `db:\"key\"` which is not a string",
 						input.String())
 				}
 			} else if tag == "update" {
@@ -65,7 +65,7 @@ func examineType(input reflect.Type) (output *learntType, err error) {
 		}
 	}
 	if output.key == "" {
-		return nil, fmt.Errorf("%s hasn't got an int64 parameter with the annotation `db:\"key\"`",
+		return nil, fmt.Errorf("%s hasn't got an string parameter with the annotation `db:\"key\"`",
 			input.String())
 	}
 	learntTypes[input] = output
@@ -73,24 +73,24 @@ func examineType(input reflect.Type) (output *learntType, err error) {
 }
 
 // Returns the key from the input ptr object
-func getKey(input interface{}) (output int64, err error) {
+func getKey(input interface{}) (output string, err error) {
 	typeDescriptor, err := examineType(reflect.TypeOf(input))
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	if reflect.ValueOf(input).IsNil() {
-		return 0, fmt.Errorf("no nil key creation allowed")
+		return "", fmt.Errorf("no nil key creation allowed")
 	}
-	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).Int()
+	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).String()
 	return
 }
 
-func setKey(inputType reflect.Type, input interface{}, key int64) {
+func setKey(inputType reflect.Type, input interface{}, key string) {
 	typeDescriptor, err := examineType(inputType)
 	if err != nil {
 		panic(err)
 	}
-	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).SetInt(key)
+	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).SetString(key)
 }
 
 func (e *Elephant) getTableName(inputType reflect.Type) (output string) {
