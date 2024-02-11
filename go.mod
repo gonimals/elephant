@@ -1,4 +1,4 @@
-module gitlab.com/gonimals/elephant
+module github.com/gonimals/elephant
 
 go 1.17
 
