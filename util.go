@@ -58,7 +58,7 @@ func compareInstances(first, second interface{}) bool {
 }
 
 // checkInitialization
-func checkInitialization(e *Elephant) {
+func checkInitialization(e *phanpy) {
 	if e == nil {
 		log.Panic("Trying to use an uninitialized instance")
 	}

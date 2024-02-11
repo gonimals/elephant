@@ -29,7 +29,7 @@ const (
 	actionNextID
 )
 
-func (e *Elephant) execManageType(inputType reflect.Type) error {
+func (e *phanpy) execManageType(inputType reflect.Type) error {
 	if e.managedTypes[inputType] {
 		return nil
 	}
@@ -52,11 +52,11 @@ func (e *Elephant) execManageType(inputType reflect.Type) error {
 	return nil
 }
 
-func (e *Elephant) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
+func (e *phanpy) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
 	return e.data[inputType][key]
 }
 
-func (e *Elephant) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {
+func (e *phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {
 	//TODO: Yes, this is not the best way to search
 	lt := e.learntTypes[inputType]
 	filterType := lt.fields[attribute]
@@ -72,11 +72,11 @@ func (e *Elephant) execRetrieveBy(inputType reflect.Type, attribute string, obje
 	return nil
 }
 
-func (e *Elephant) execRetrieveAll(inputType reflect.Type) (output interface{}) {
+func (e *phanpy) execRetrieveAll(inputType reflect.Type) (output interface{}) {
 	return e.data[inputType]
 }
 
-func (e *Elephant) execRemove(inputType reflect.Type, input interface{}) error {
+func (e *phanpy) execRemove(inputType reflect.Type, input interface{}) error {
 	key, err := getKey(input)
 	if err != nil {
 		return fmt.Errorf("elephant: cannot get id from element")
@@ -84,7 +84,7 @@ func (e *Elephant) execRemove(inputType reflect.Type, input interface{}) error {
 	return e.execRemoveByKey(inputType, key)
 }
 
-func (e *Elephant) execRemoveByKey(inputType reflect.Type, key string) (err error) {
+func (e *phanpy) execRemoveByKey(inputType reflect.Type, key string) (err error) {
 	if !e.execExists(inputType, key) {
 		return fmt.Errorf("elephant: there is not element with such id")
 	}
@@ -95,7 +95,7 @@ func (e *Elephant) execRemoveByKey(inputType reflect.Type, key string) (err erro
 	return
 }
 
-func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
+func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
 	key, err := getKey(object)
 	if err != nil {
 		return err
@@ -117,7 +117,7 @@ func (e *Elephant) execCreate(inputType reflect.Type, object interface{}) (outpu
 	return key
 }
 
-func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err error) {
+func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err error) {
 	key, err := getKey(object)
 	if err != nil {
 		return
@@ -143,16 +143,16 @@ func (e *Elephant) execUpdate(inputType reflect.Type, object interface{}) (err e
 	return
 }
 
-func (e *Elephant) execExists(inputType reflect.Type, key string) (output bool) {
+func (e *phanpy) execExists(inputType reflect.Type, key string) (output bool) {
 	_, output = e.data[inputType][key]
 	return
 }
 
-func (e *Elephant) execExistsBy(inputType reflect.Type, attribute string, object interface{}) bool {
+func (e *phanpy) execExistsBy(inputType reflect.Type, attribute string, object interface{}) bool {
 	return e.execRetrieveBy(inputType, attribute, object) != nil
 }
 
-func (e *Elephant) execNextID(inputType reflect.Type) string {
+func (e *phanpy) execNextID(inputType reflect.Type) string {
 	//TODO: Yes, this is not the best way to search
 	var outputInt int
 	for outputInt = 0; e.data[inputType][strconv.Itoa(outputInt)] != nil; outputInt++ {
@@ -160,7 +160,7 @@ func (e *Elephant) execNextID(inputType reflect.Type) string {
 	return strconv.Itoa(outputInt)
 }
 
-func (e *Elephant) mainRoutine() {
+func (e *phanpy) mainRoutine() {
 	for {
 		action := <-e.channel
 		if action == nil {

@@ -2,105 +2,108 @@ package elephant
 
 import (
 	"fmt"
-	"log"
 	"reflect"
-	"strings"
+	"regexp"
 )
 
-const ContextSymbol = "."
+// MaxStructLength defines how long can be a structure converted to JSON to be stored
+const MaxStructLength = 65535 //64k
 
-// Structs
-type learntType struct {
-	name    string
-	key     string //only needed if struct will be a db table
-	fields  map[string]reflect.Type
-	updates map[string]struct{}
+// MainContext is the default context
+var MainContext Elephant
+
+// db is the database driver in use
+var db dbDriver
+
+// Elephant provides db access to a concrete context
+type Elephant interface {
+
+	// Retrieve gets one element from a specific type filtering by key
+	// Returns the element if found and nil if not
+	Retrieve(inputType reflect.Type, key string) interface{}
+
+	// RetrieveBy gets one element from a specific type filtering by other attribute
+	// Returns the element if found and nil if parameters are incorrect or the element is not found
+	RetrieveBy(inputType reflect.Type, attribute string, input interface{}) interface{}
+
+	// RetrieveAll gets all elements with a specific type
+	// Returns a map with all elements. It will be empty if there are no elements
+	RetrieveAll(inputType reflect.Type) (map[string]interface{}, error)
+
+	// Remove deletes one element from the database
+	// Returns err if the object does not exist
+	Remove(input interface{}) error
+
+	// RemoveByKey deletes one element from the database
+	// Returns err if the object does not exist
+	RemoveByKey(inputType reflect.Type, key string) error
+
+	// Update modifies an element on the database
+	Update(input interface{}) error
+
+	// Create adds one element to the database
+	// If the key attribute value is empty (""), a new one will be assigned
+	Create(input interface{}) (string, error)
+
+	// Exists check if one key is in use in the database
+	Exists(inputType reflect.Type, key string) bool
+
+	// ExistsBy gets one element from a specific type filtering by other attribute
+	// Returns true if found and false if parameters are incorrect or the element is not found
+	ExistsBy(inputType reflect.Type, attribute string, input interface{}) bool
+
+	// NextID gives an empty id to create a new entry
+	NextID(inputType reflect.Type) string
+
+	// close should be called to stop Elephant
+	close()
 }
 
-type dbDriver interface {
-	dbClose()
-	dbRetrieve(inputType string, key string) (output string, err error)
-	dbRetrieveAll(inputType string) (output map[string]string, err error)
-	dbCreate(inputType string, key string, input string) (err error)
-	dbUpdate(inputType string, key string, input string) (err error)
-	dbRemove(inputType string, key string) (err error)
-}
-
-var currentElephants map[string]*Elephant
-var learntTypes map[reflect.Type]*learntType
-
-// examineType will check that the type can be transformed into JSON and has an Id parameter
-func examineType(input reflect.Type) (output *learntType, err error) {
-	if input.Kind() != reflect.Ptr || input.Elem().Kind() != reflect.Struct {
-		return nil, fmt.Errorf("%s is not a pointer to struct. Kind: %s",
-			input.String(), input.Kind().String())
+// Initialize requires a supported uri using one of the following supported formats
+func Initialize(uri string) (err error) {
+	sqlite3 := regexp.MustCompile(`sqlite3://`)
+	if sqlite3split := sqlite3.Split(uri, 2); len(sqlite3split) == 2 {
+		db, err = sqlite3dbConnect(sqlite3split[1])
+	} else {
+		err = fmt.Errorf("elephant: unsupported uri string: %s", uri)
 	}
-	input = input.Elem()
-	output = learntTypes[input]
-	if output != nil {
-		return // type was already processed
+	if err == nil {
+		currentElephants = make(map[string]Elephant)
+		learntTypes = make(map[reflect.Type]*learntType)
+		MainContext, err = GetElephant("")
 	}
-	output = new(learntType)
-	output.fields = make(map[string]reflect.Type)
-	output.updates = make(map[string]struct{})
-	output.name = input.Name()
-	if strings.Contains(output.name, ContextSymbol) {
-		log.Fatalln("Type name " + output.name + " contains the character " + ContextSymbol + " which is also used as context symbol. This should never happen.")
-	}
-
-	for i := 0; i < input.NumField(); i++ {
-		field := input.Field(i)
-		output.fields[field.Name] = field.Type
-		if field.Tag != "" {
-			tag := field.Tag.Get("db")
-			if tag == "key" {
-				output.key = field.Name
-				if field.Type.Kind() != reflect.String {
-					return nil, fmt.Errorf("%s has a parameter with the annotation `db:\"key\"` which is not a string",
-						input.String())
-				}
-			} else if tag == "update" {
-				output.updates[field.Name] = struct{}{}
-			}
-		}
-	}
-	if output.key == "" {
-		return nil, fmt.Errorf("%s hasn't got an string parameter with the annotation `db:\"key\"`",
-			input.String())
-	}
-	learntTypes[input] = output
 	return
 }
 
-// Returns the key from the input ptr object
-func getKey(input interface{}) (output string, err error) {
-	typeDescriptor, err := examineType(reflect.TypeOf(input))
-	if err != nil {
-		return "", err
+// Close should be called as a deferred method after Initialize
+func Close() {
+	for _, e := range currentElephants {
+		e.close()
 	}
-	if reflect.ValueOf(input).IsNil() {
-		return "", fmt.Errorf("no nil key creation allowed")
-	}
-	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).String()
-	return
+	db.dbClose()
+	db = nil
+	MainContext = nil
+	currentElephants = nil
+	learntTypes = nil
 }
 
-func setKey(inputType reflect.Type, input interface{}, key string) {
-	typeDescriptor, err := examineType(inputType)
-	if err != nil {
-		panic(err)
+// GetElephant returns a valid elephant for the required context
+func GetElephant(context string) (e Elephant, err error) {
+	if db == nil {
+		return nil, fmt.Errorf("no database initialized")
 	}
-	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.key).SetString(key)
-}
-
-func (e *Elephant) getTableName(inputType reflect.Type) (output string) {
-	if e.Context != "" {
-		output = e.Context + ContextSymbol
+	e = currentElephants[context]
+	if e == nil {
+		p := new(phanpy)
+		p.Context = context
+		p.data = make(map[reflect.Type](map[string]interface{}))
+		p.learntTypes = make(map[reflect.Type]*learntType)
+		p.channel = make(chan *internalAction)
+		p.managedTypes = make(map[reflect.Type]bool)
+		p.waitgroup.Add(1)
+		go p.mainRoutine()
+		currentElephants[context] = p
+		e = p
 	}
-	typeDescriptor, err := examineType(inputType)
-	if err != nil {
-		panic(err)
-	}
-	output += typeDescriptor.name
 	return
 }

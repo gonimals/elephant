@@ -136,7 +136,7 @@ func TestCorrectFunctions(t *testing.T) {
 	}
 	if allInstances, _ := MainContext.RetrieveAll(structCheckType); len(allInstances) != 2 {
 		t.Error("Entire instances count differs after deletion by key")
-		for key, value := range MainContext.data[structCheckType] {
+		for key, value := range MainContext.(*phanpy).data[structCheckType] {
 			log.Println(key, value)
 		}
 	}
@@ -146,7 +146,7 @@ func TestCorrectFunctions(t *testing.T) {
 	}
 	if allInstances, _ := MainContext.RetrieveAll(structCheckType); len(allInstances) != 1 {
 		t.Error("Entire instances count differs after deletion")
-		for key, value := range MainContext.data[structCheckType] {
+		for key, value := range MainContext.(*phanpy).data[structCheckType] {
 			log.Println(key, value)
 		}
 	}
