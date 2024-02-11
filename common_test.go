@@ -16,6 +16,11 @@ type failingStructCheck struct {
 	Mybool   bool
 }
 
+type fileStructCheck struct {
+	Filename string `db:"key"`
+	Contents []byte
+}
+
 /*
 type stringStructCheck struct {
 	Mystring string `db:"key"`
