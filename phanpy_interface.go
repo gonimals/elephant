@@ -104,6 +104,27 @@ func (e *phanpy) NextID(inputType reflect.Type) string {
 	return (<-action.output).(string)
 }
 
+func (e *phanpy) BlobCreate(key string, contents *[]byte) error {
+	checkInitialization(e)
+	action := newInternalAction(actionBlobCreate, blobReflectType, key, contents)
+	e.channel <- action
+	return (<-action.output).(error)
+}
+
+func (e *phanpy) BlobRemove(key string) error {
+	checkInitialization(e)
+	action := newInternalAction(actionBlobRemove, blobReflectType, key)
+	e.channel <- action
+	return (<-action.output).(error)
+}
+
+func (e *phanpy) BlobRetrieve(key string) *[]byte {
+	checkInitialization(e)
+	action := newInternalAction(actionBlobRemove, blobReflectType, key)
+	e.channel <- action
+	return (<-action.output).(*[]byte)
+}
+
 func (e *phanpy) close() {
 	close(e.channel)
 	e.waitgroup.Wait()

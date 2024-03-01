@@ -27,7 +27,12 @@ const (
 	actionExists
 	actionExistsBy
 	actionNextID
+	actionBlobCreate
+	actionBlobRemove
+	actionBlobRetrieve
 )
+
+var /*const*/ blobReflectType = reflect.TypeOf(make([]byte, 0))
 
 func (e *phanpy) execManageType(inputType reflect.Type) error {
 	if e.managedTypes[inputType] {
@@ -117,6 +122,21 @@ func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output 
 	return key
 }
 
+func (e *phanpy) execBlobCreate(key string, contents *[]byte) error {
+	if e.data[blobReflectType][key] != nil {
+		return fmt.Errorf("elephant: trying to create a blob with id in use")
+	}
+	e.data[blobReflectType][key] = copyEntireObject(contents)
+	if len(contents) > MaxStructLength {
+		return fmt.Errorf()
+	}
+	err = db.dbCreate(e.getTableName(blobReflectType), key, string(objectString))
+	if err != nil {
+		delete(e.data[blobReflectType], key)
+	}
+	return key
+}
+
 func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err error) {
 	key, err := getKey(object)
 	if err != nil {
@@ -193,6 +213,10 @@ func (e *phanpy) mainRoutine() {
 			action.output <- e.execExistsBy(action.inputType, action.object[0].(string), action.object[1])
 		case actionNextID:
 			action.output <- e.execNextID(action.inputType)
+		case actionBlobCreate:
+			action.output <- e.execBlobCreate(action.inputType, action.object[0])
+		case actionBlobRemove:
+		case actionBlobRetrieve:
 		default:
 			action.output <- nil
 		}
