@@ -1,4 +1,4 @@
-package elephant
+package test
 
 const temporaryDB = "/tmp/foo.db"
 
@@ -14,11 +14,6 @@ type failingStructCheck struct {
 	Myint    int `db:"key"`
 	Myint64  int64
 	Mybool   bool
-}
-
-type fileStructCheck struct {
-	Filename string `db:"key"`
-	Contents []byte
 }
 
 /*

@@ -1,4 +1,4 @@
-package elephant
+package util
 
 import (
 	"bytes"
@@ -7,8 +7,8 @@ import (
 	"reflect"
 )
 
-// copyInstance Sets src values in the dest instance
-func copyInstance(src, dest interface{}) error {
+// CopyInstance Sets src values in the dest instance
+func CopyInstance(src, dest interface{}) error {
 	//log.Println(reflect.TypeOf(src), reflect.TypeOf(dest))
 	if reflect.TypeOf(src) != reflect.TypeOf(dest) || reflect.TypeOf(src).Kind() != reflect.Ptr {
 		panic("Cannot copy one instance to other if type differs")
@@ -20,8 +20,8 @@ func copyInstance(src, dest interface{}) error {
 	return nil
 }
 
-// loadObjectFromJson creates an instance from JSON bytes and type
-func loadObjectFromJson(objectType reflect.Type, objectString []byte) interface{} {
+// LoadObjectFromJson creates an instance from JSON bytes and type
+func LoadObjectFromJson(objectType reflect.Type, objectString []byte) interface{} {
 	if objectType.Kind() != reflect.Ptr {
 		panic("Cannot copy the entire object without pointer")
 	}
@@ -35,17 +35,17 @@ func loadObjectFromJson(objectType reflect.Type, objectString []byte) interface{
 	return reflect.ValueOf(instance).Elem().Interface()
 }
 
-// copyEntireObject creates an instance from another instance
-func copyEntireObject(src interface{}) interface{} {
+// CopyEntireObject creates an instance from another instance
+func CopyEntireObject(src interface{}) interface{} {
 	objectString, err := json.Marshal(src)
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", src)
 	}
-	return loadObjectFromJson(reflect.TypeOf(src), objectString)
+	return LoadObjectFromJson(reflect.TypeOf(src), objectString)
 }
 
-// compareInstances returns true if both instance JSONs are equal
-func compareInstances(first, second interface{}) bool {
+// CompareInstances returns true if both instance JSONs are equal
+func CompareInstances(first, second interface{}) bool {
 	string1, err := json.Marshal(first)
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", first)
@@ -57,9 +57,12 @@ func compareInstances(first, second interface{}) bool {
 	return bytes.Equal(string1, string2)
 }
 
-// checkInitialization
-func checkInitialization(e *phanpy) {
-	if e == nil {
-		log.Panic("Trying to use an uninitialized instance")
+func BlobsEqual(input1, input2 *[]byte) bool {
+	if input1 == input2 {
+		return true
 	}
+	if input1 == nil || input2 == nil {
+		return false
+	}
+	return bytes.Equal(*input1, *input2)
 }

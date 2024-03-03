@@ -1,4 +1,4 @@
-package elephant
+package phanpy
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"log"
 	"reflect"
 	"strconv"
+
+	"github.com/gonimals/elephant/internal/util"
 )
 
 type internalAction struct {
@@ -35,42 +37,42 @@ const (
 
 var /*const*/ blobReflectType = reflect.TypeOf(&[]byte{})
 
-func (e *phanpy) execManageType(inputType reflect.Type) error {
+func (e *Phanpy) execManageType(inputType reflect.Type) error {
 	if e.managedTypes[inputType] {
 		return nil
 	}
 	// Type is not managed. Start the managing actions
-	learntType, err := examineType(inputType)
+	learntType, err := util.ExamineType(inputType)
 	if err != nil {
 		return err
 	}
 	e.managedTypes[inputType] = true
 	e.learntTypes[inputType] = learntType
 
-	data, err := db.dbRetrieveAll(e.getTableName(inputType))
+	data, err := e.dbDriver.RetrieveAll(e.getTableName(inputType))
 	if err != nil {
 		log.Fatalln("Error reading data from database:", err)
 	}
-	e.data[inputType] = make(map[string]interface{})
+	e.Data[inputType] = make(map[string]interface{})
 	for key, value := range data {
-		e.data[inputType][key] = loadObjectFromJson(inputType, []byte(value))
+		e.Data[inputType][key] = util.LoadObjectFromJson(inputType, []byte(value))
 	}
 	return nil
 }
 
-func (e *phanpy) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
-	return e.data[inputType][key]
+func (e *Phanpy) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
+	return e.Data[inputType][key]
 }
 
-func (e *phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {
+func (e *Phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {
 	//TODO: Yes, this is not the best way to search
 	lt := e.learntTypes[inputType]
-	filterType := lt.fields[attribute]
+	filterType := lt.Fields[attribute]
 	if filterType == nil || reflect.TypeOf(object) != filterType {
 		//log.Println("RetrieveBy executed with invalid arguments:", filterType, reflect.TypeOf(object))
 		return nil
 	}
-	for _, elem := range e.data[inputType] {
+	for _, elem := range e.Data[inputType] {
 		if object == reflect.ValueOf(elem).Elem().FieldByName(attribute).Interface() {
 			return elem
 		}
@@ -78,77 +80,77 @@ func (e *phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object
 	return nil
 }
 
-func (e *phanpy) execRetrieveAll(inputType reflect.Type) (output interface{}) {
-	return e.data[inputType]
+func (e *Phanpy) execRetrieveAll(inputType reflect.Type) (output interface{}) {
+	return e.Data[inputType]
 }
 
-func (e *phanpy) execBlobRetrieve(key string) (output interface{}) {
-	blob, _ := db.dbBlobRetrieve(key)
+func (e *Phanpy) execBlobRetrieve(key string) (output interface{}) {
+	blob, _ := e.dbDriver.BlobRetrieve(key)
 	// The error is ignored, as it will probably be norows
 	return blob
 }
 
-func (e *phanpy) execRemove(inputType reflect.Type, input interface{}) error {
-	key, err := getKey(input)
+func (e *Phanpy) execRemove(inputType reflect.Type, input interface{}) error {
+	key, err := util.GetKey(input)
 	if err != nil {
 		return fmt.Errorf("elephant: cannot get id from element")
 	}
 	return e.execRemoveByKey(inputType, key)
 }
 
-func (e *phanpy) execRemoveByKey(inputType reflect.Type, key string) (err error) {
+func (e *Phanpy) execRemoveByKey(inputType reflect.Type, key string) (err error) {
 	if !e.execExists(inputType, key) {
 		return fmt.Errorf("elephant: there is not element with such id")
 	}
-	err = db.dbRemove(e.getTableName(inputType), key)
+	err = e.dbDriver.Remove(e.getTableName(inputType), key)
 	if err == nil {
-		delete(e.data[inputType], key)
+		delete(e.Data[inputType], key)
 	}
 	return
 }
 
-func (e *phanpy) execBlobRemove(key string) (err error) {
-	return db.dbBlobRemove(key)
+func (e *Phanpy) execBlobRemove(key string) (err error) {
+	return e.dbDriver.BlobRemove(key)
 }
 
-func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
-	key, err := getKey(object)
+func (e *Phanpy) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
+	key, err := util.GetKey(object)
 	if err != nil {
 		return err
 	} else if key == "" {
 		key = e.execNextID(inputType)
-		setKey(inputType, object, key)
-	} else if e.data[inputType][key] != nil {
+		util.SetKey(inputType, object, key)
+	} else if e.Data[inputType][key] != nil {
 		return fmt.Errorf("elephant: trying to create an object with id in use")
 	}
-	e.data[inputType][key] = copyEntireObject(object)
+	e.Data[inputType][key] = util.CopyEntireObject(object)
 	objectString, err := json.Marshal(object)
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
 	}
-	if len(objectString) > MaxStructLength {
+	if len(objectString) > util.MaxStructLength {
 		return fmt.Errorf("elephant: serialized object too long to be stored")
 	}
-	err = db.dbCreate(e.getTableName(inputType), key, string(objectString))
+	err = e.dbDriver.Create(e.getTableName(inputType), key, string(objectString))
 	if err != nil {
-		delete(e.data[inputType], key)
+		delete(e.Data[inputType], key)
 	}
 	return key
 }
 
-func (e *phanpy) execBlobCreate(key string, contents *[]byte) error {
-	if len(*contents) > MaxBlobsLength {
+func (e *Phanpy) execBlobCreate(key string, contents *[]byte) error {
+	if len(*contents) > util.MaxBlobsLength {
 		return fmt.Errorf("elephant: blob too big to be stored")
 	}
-	return db.dbBlobCreate(key, contents)
+	return e.dbDriver.BlobCreate(key, contents)
 }
 
-func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err error) {
-	key, err := getKey(object)
+func (e *Phanpy) execUpdate(inputType reflect.Type, object interface{}) (err error) {
+	key, err := util.GetKey(object)
 	if err != nil {
 		return
 	}
-	oldObject, existingObject := e.data[inputType][key]
+	oldObject, existingObject := e.Data[inputType][key]
 	if !existingObject {
 		return fmt.Errorf("elephant: trying to update unexistent object")
 	}
@@ -157,14 +159,14 @@ func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
 	}
-	if len(objectString) > MaxStructLength {
+	if len(objectString) > util.MaxStructLength {
 		return fmt.Errorf("elephant: serialized object too long to be stored")
 	}
-	err = db.dbUpdate(e.getTableName(inputType), key, string(objectString))
+	err = e.dbDriver.Update(e.getTableName(inputType), key, string(objectString))
 	if err != nil {
-		e.data[inputType][key] = oldObject
+		e.Data[inputType][key] = oldObject
 	} else {
-		err := copyInstance(object, oldObject)
+		err := util.CopyInstance(object, oldObject)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -172,28 +174,28 @@ func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 	return
 }
 
-func (e *phanpy) execBlobUpdate(key string, contents *[]byte) (err error) {
-	return db.dbBlobUpdate(key, contents)
+func (e *Phanpy) execBlobUpdate(key string, contents *[]byte) (err error) {
+	return e.dbDriver.BlobUpdate(key, contents)
 }
 
-func (e *phanpy) execExists(inputType reflect.Type, key string) (output bool) {
-	_, output = e.data[inputType][key]
+func (e *Phanpy) execExists(inputType reflect.Type, key string) (output bool) {
+	_, output = e.Data[inputType][key]
 	return
 }
 
-func (e *phanpy) execExistsBy(inputType reflect.Type, attribute string, object interface{}) bool {
+func (e *Phanpy) execExistsBy(inputType reflect.Type, attribute string, object interface{}) bool {
 	return e.execRetrieveBy(inputType, attribute, object) != nil
 }
 
-func (e *phanpy) execNextID(inputType reflect.Type) string {
+func (e *Phanpy) execNextID(inputType reflect.Type) string {
 	//TODO: Yes, this is not the best way to search
 	var outputInt int
-	for outputInt = 0; e.data[inputType][strconv.Itoa(outputInt)] != nil; outputInt++ {
+	for outputInt = 0; e.Data[inputType][strconv.Itoa(outputInt)] != nil; outputInt++ {
 	}
 	return strconv.Itoa(outputInt)
 }
 
-func (e *phanpy) mainRoutine() {
+func (e *Phanpy) mainRoutine() {
 	for {
 		action := <-e.channel
 		if action == nil {
@@ -247,4 +249,16 @@ func newInternalAction(code int, inputType reflect.Type, object ...interface{}) 
 		inputType: inputType,
 		object:    object,
 		output:    make(chan interface{})}
+}
+
+func (e *Phanpy) getTableName(inputType reflect.Type) (output string) {
+	if e.Context != "" {
+		output = e.Context + util.ContextSymbol
+	}
+	typeDescriptor, err := util.ExamineType(inputType)
+	if err != nil {
+		panic(err)
+	}
+	output += typeDescriptor.Name
+	return
 }

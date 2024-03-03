@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+
+	"github.com/gonimals/elephant/internal/db"
+	"github.com/gonimals/elephant/internal/db/sqlite3"
+	"github.com/gonimals/elephant/internal/phanpy"
 )
-
-// MaxStructLength defines how long can be a structure converted to JSON to be stored
-const MaxStructLength = 65535 //64k
-
-// MaxBlobsLength defines how big can be blobs stored
-const MaxBlobsLength = 65535 //64k
 
 // MainContext is the default context
 var MainContext Elephant
 
 // db is the database driver in use
-var db dbDriver
+var dbDriver db.Driver
+
+var currentElephants map[string]Elephant
 
 // Elephant provides db access to a concrete context
 //
@@ -53,7 +53,7 @@ var db dbDriver
 //
 // # BlobRetrieve returns blob contents if found. If not, returns nil
 //
-// close should be called to stop Elephant
+// # Close should be called only from elephant.Close()
 type Elephant interface {
 	Retrieve(inputType reflect.Type, key string) interface{}
 	RetrieveBy(inputType reflect.Type, attribute string, input interface{}) interface{}
@@ -69,20 +69,19 @@ type Elephant interface {
 	BlobCreate(key string, contents *[]byte) error
 	BlobRemove(key string) error
 	BlobUpdate(key string, contents *[]byte) error
-	close()
+	Close()
 }
 
 // Initialize requires a supported uri using one of the following supported formats
 func Initialize(uri string) (err error) {
-	sqlite3 := regexp.MustCompile(`sqlite3://`)
-	if sqlite3split := sqlite3.Split(uri, 2); len(sqlite3split) == 2 {
-		db, err = sqlite3dbConnect(sqlite3split[1])
+	sqlite3Regexp := regexp.MustCompile(`sqlite3://`)
+	if sqlite3split := sqlite3Regexp.Split(uri, 2); len(sqlite3split) == 2 {
+		dbDriver, err = sqlite3.Connect(sqlite3split[1])
 	} else {
 		err = fmt.Errorf("elephant: unsupported uri string: %s", uri)
 	}
 	if err == nil {
 		currentElephants = make(map[string]Elephant)
-		learntTypes = make(map[reflect.Type]*learntType)
 		MainContext, err = GetElephant("")
 	}
 	return
@@ -91,34 +90,22 @@ func Initialize(uri string) (err error) {
 // Close should be called as a deferred method after Initialize
 func Close() {
 	for _, e := range currentElephants {
-		e.close()
+		e.Close()
 	}
-	db.dbClose()
-	db = nil
+	dbDriver.Close()
+	dbDriver = nil
 	MainContext = nil
 	currentElephants = nil
-	learntTypes = nil
 }
 
 // GetElephant returns a valid elephant for the required context
 func GetElephant(context string) (e Elephant, err error) {
-	if db == nil {
+	if dbDriver == nil {
 		return nil, fmt.Errorf("no database initialized")
 	}
 	e = currentElephants[context]
 	if e == nil {
-		p := new(phanpy)
-		p.Context = context
-		p.data = make(map[reflect.Type](map[string]interface{}))
-		p.learntTypes = make(map[reflect.Type]*learntType)
-		p.channel = make(chan *internalAction)
-		p.managedTypes = make(map[reflect.Type]bool)
-		p.learntTypes[blobReflectType] = &learntType{
-			name: "blob",
-		}
-		p.managedTypes[blobReflectType] = true
-		p.waitgroup.Add(1)
-		go p.mainRoutine()
+		p := phanpy.CreatePhanpy(context, dbDriver)
 		currentElephants[context] = p
 		e = p
 	}

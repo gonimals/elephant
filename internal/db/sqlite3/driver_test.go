@@ -1,95 +1,96 @@
-package elephant
+package sqlite3
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"testing"
 
+	"github.com/gonimals/elephant/internal/util"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//t.Error("Current test")
+// t.Error("Current test")
+const temporaryDB = "/tmp/foo.db"
 
 func TestDriverSqlite3(t *testing.T) {
 	os.Remove(temporaryDB)
-	db, err := sqlite3dbConnect(temporaryDB)
+	db, err := Connect(temporaryDB)
 	if err != nil {
 		t.Error("failed to create a valid db")
 	}
-	defer db.dbClose()
-	err = db.dbCreate("test_table", "1", "asdfasdf")
+	defer db.Close()
+	err = db.Create("test_table", "1", "asdfasdf")
 	if err != nil {
 		t.Error("simple create operation fails:", err)
 	}
-	output, err := db.dbRetrieve("test_table", "1")
+	output, err := db.Retrieve("test_table", "1")
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
 	if output != "asdfasdf" {
 		t.Error("retrieved string is not the original")
 	}
-	err = db.dbUpdate("test_table", "1", "fdsafdsa")
+	err = db.Update("test_table", "1", "fdsafdsa")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
-	err = db.dbUpdate("test_table", "1", "fdsafdsa")
+	err = db.Update("test_table", "1", "fdsafdsa")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
-	output, err = db.dbRetrieve("test_table", "1")
+	output, err = db.Retrieve("test_table", "1")
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
 	if output != "fdsafdsa" {
 		t.Errorf("retrieved string is not the updated one")
 	}
-	err = db.dbRemove("test_table", "1")
+	err = db.Remove("test_table", "1")
 	if err != nil {
 		t.Error("simple delete operation fails:", err)
 	}
-	output, err = db.dbRetrieve("test_table", "1")
+	output, err = db.Retrieve("test_table", "1")
 	if err == nil {
 		t.Error("retrieve operation of deleted item doesn't give error")
 	} else if output != "" {
 		t.Error("retrieve operation of deleted item gives output:", output)
 	}
-	err = db.dbBlobCreate("1", &[]byte{0x00})
+	err = db.BlobCreate("1", &[]byte{0x00})
 	if err != nil {
 		t.Error("blob create operation fails:", err)
 	}
-	blob, err := db.dbBlobRetrieve("1")
+	blob, err := db.BlobRetrieve("1")
 	if err != nil {
 		t.Error("blob retrieve operation fails:", err)
 	}
-	if !blobsEqual(blob, &[]byte{0x00}) {
+	if !util.BlobsEqual(blob, &[]byte{0x00}) {
 		t.Error("retrieved blob is not the original")
 	}
-	err = db.dbBlobUpdate("1", &[]byte{0x01})
+	err = db.BlobUpdate("1", &[]byte{0x01})
 	if err != nil {
 		t.Error("blob update operation fails:", err)
 	}
-	blob, err = db.dbBlobRetrieve("1")
+	blob, err = db.BlobRetrieve("1")
 	if err != nil {
 		t.Error("blob retrieve operation fails:", err)
 	}
-	if !blobsEqual(blob, &[]byte{0x01}) {
+	if !util.BlobsEqual(blob, &[]byte{0x01}) {
 		t.Error("retrieved blob is not the updated one")
 	}
-	err = db.dbBlobRemove("1")
+	err = db.BlobRemove("1")
 	if err != nil {
 		t.Error("blob delete operation fails:", err)
 	}
-	err = db.dbBlobRemove("1")
+	err = db.BlobRemove("1")
 	if err == nil {
 		t.Error("blob delete operation should fail")
 	}
-	blob, err = db.dbBlobRetrieve("1")
+	blob, err = db.BlobRetrieve("1")
 	if err == nil {
 		t.Error("retrieve operation of deleted blob doesn't give error")
-	} else if blobsEqual(blob, &[]byte{0x00}) {
+	} else if util.BlobsEqual(blob, &[]byte{0x00}) {
 		t.Error("retrieve operation of deleted blob gives output:", blob)
 	}
 
@@ -152,14 +153,4 @@ func TestSqlite3(t *testing.T) {
 
 	// Reset
 	os.Remove(temporaryDB)
-}
-
-func blobsEqual(input1, input2 *[]byte) bool {
-	if input1 == input2 {
-		return true
-	}
-	if input1 == nil || input2 == nil {
-		return false
-	}
-	return bytes.Equal(*input1, *input2)
 }

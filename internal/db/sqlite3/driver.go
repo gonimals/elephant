@@ -1,4 +1,4 @@
-package elephant
+package sqlite3
 
 import (
 	"database/sql"
@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gonimals/elephant/internal/util"
 	_ "github.com/mattn/go-sqlite3" //Add support for sqlite3 db
 )
 
@@ -14,7 +15,7 @@ import (
 const maxRegexLength = "40"
 
 // Regular expression used to check that no SQL injection is produced
-var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + ContextSymbol + "]{1," + maxRegexLength + "}$")
+var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + util.ContextSymbol + "]{1," + maxRegexLength + "}$")
 
 // Name for the table to store byte blobs
 const sqlite3BlobsTableName = "blobs"
@@ -61,8 +62,8 @@ func init() {
 	sqliteCreationMap[stmtUpdate] = "update '%s' set value = ? where id = ?"
 }
 
-// ConnectSQLdriverDatabase should be the first method called to initialize the db connection
-func sqlite3dbConnect(dataSourceName string) (output *driverSqlite3, err error) {
+// Connect should be the first method called to initialize the db connection
+func Connect(dataSourceName string) (output *driverSqlite3, err error) {
 	output = new(driverSqlite3)
 	output.db, err = sql.Open("sqlite3", dataSourceName)
 	if err != nil {
@@ -73,7 +74,7 @@ func sqlite3dbConnect(dataSourceName string) (output *driverSqlite3, err error) 
 	return
 }
 
-func (d *driverSqlite3) dbClose() {
+func (d *driverSqlite3) Close() {
 	d.db.Close()
 }
 
@@ -156,13 +157,13 @@ func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 	return
 }
 
-func (d *driverSqlite3) dbRetrieve(inputType string, key string) (output string, err error) {
+func (d *driverSqlite3) Retrieve(inputType string, key string) (output string, err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	err = handledType.stmts[stmtRetrieve].QueryRow(key).Scan(&output)
 	return
 }
 
-func (d *driverSqlite3) dbRetrieveAll(inputType string) (output map[string]string, err error) {
+func (d *driverSqlite3) RetrieveAll(inputType string) (output map[string]string, err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	rows, err := handledType.stmts[stmtRetrieveAll].Query()
 	if err != nil {
@@ -181,33 +182,33 @@ func (d *driverSqlite3) dbRetrieveAll(inputType string) (output map[string]strin
 	return
 }
 
-func (d *driverSqlite3) dbRemove(inputType string, key string) (err error) {
+func (d *driverSqlite3) Remove(inputType string, key string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtDelete].Exec(key)
 	return
 }
 
-func (d *driverSqlite3) dbCreate(inputType string, key string, input string) (err error) {
+func (d *driverSqlite3) Create(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtInsert].Exec(key, input)
 	return
 }
 
-func (d *driverSqlite3) dbUpdate(inputType string, key string, input string) (err error) {
+func (d *driverSqlite3) Update(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtUpdate].Exec(input, key)
 	return
 }
 
-func (d *driverSqlite3) dbBlobRetrieve(key string) (output *[]byte, err error) {
+func (d *driverSqlite3) BlobRetrieve(key string) (output *[]byte, err error) {
 	err = d.blobStmts[stmtRetrieve].QueryRow(key).Scan(&output)
 	return
 }
-func (d *driverSqlite3) dbBlobCreate(key string, input *[]byte) (err error) {
+func (d *driverSqlite3) BlobCreate(key string, input *[]byte) (err error) {
 	_, err = d.blobStmts[stmtInsert].Exec(key, input)
 	return
 }
-func (d *driverSqlite3) dbBlobUpdate(key string, input *[]byte) (err error) {
+func (d *driverSqlite3) BlobUpdate(key string, input *[]byte) (err error) {
 	result, err := d.blobStmts[stmtUpdate].Exec(input, key)
 	if err != nil {
 		return
@@ -221,7 +222,7 @@ func (d *driverSqlite3) dbBlobUpdate(key string, input *[]byte) (err error) {
 	}
 	return
 }
-func (d *driverSqlite3) dbBlobRemove(key string) (err error) {
+func (d *driverSqlite3) BlobRemove(key string) (err error) {
 	result, err := d.blobStmts[stmtDelete].Exec(key)
 	if err != nil {
 		return
