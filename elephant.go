@@ -9,6 +9,9 @@ import (
 // MaxStructLength defines how long can be a structure converted to JSON to be stored
 const MaxStructLength = 65535 //64k
 
+// MaxBlobsLength defines how big can be blobs stored
+const MaxBlobsLength = 65535 //64k
+
 // MainContext is the default context
 var MainContext Elephant
 
@@ -62,9 +65,10 @@ type Elephant interface {
 	Exists(inputType reflect.Type, key string) bool
 	ExistsBy(inputType reflect.Type, attribute string, input interface{}) bool
 	NextID(inputType reflect.Type) string
+	BlobRetrieve(key string) *[]byte
 	BlobCreate(key string, contents *[]byte) error
 	BlobRemove(key string) error
-	BlobRetrieve(key string) *[]byte
+	BlobUpdate(key string, contents *[]byte) error
 	close()
 }
 
@@ -109,6 +113,10 @@ func GetElephant(context string) (e Elephant, err error) {
 		p.learntTypes = make(map[reflect.Type]*learntType)
 		p.channel = make(chan *internalAction)
 		p.managedTypes = make(map[reflect.Type]bool)
+		p.learntTypes[blobReflectType] = &learntType{
+			name: "blob",
+		}
+		p.managedTypes[blobReflectType] = true
 		p.waitgroup.Add(1)
 		go p.mainRoutine()
 		currentElephants[context] = p

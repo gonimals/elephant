@@ -27,12 +27,13 @@ const (
 	actionExists
 	actionExistsBy
 	actionNextID
+	actionBlobRetrieve
 	actionBlobCreate
 	actionBlobRemove
-	actionBlobRetrieve
+	actionBlobUpdate
 )
 
-var /*const*/ blobReflectType = reflect.TypeOf(make([]byte, 0))
+var /*const*/ blobReflectType = reflect.TypeOf(&[]byte{})
 
 func (e *phanpy) execManageType(inputType reflect.Type) error {
 	if e.managedTypes[inputType] {
@@ -81,6 +82,12 @@ func (e *phanpy) execRetrieveAll(inputType reflect.Type) (output interface{}) {
 	return e.data[inputType]
 }
 
+func (e *phanpy) execBlobRetrieve(key string) (output interface{}) {
+	blob, _ := db.dbBlobRetrieve(key)
+	// The error is ignored, as it will probably be norows
+	return blob
+}
+
 func (e *phanpy) execRemove(inputType reflect.Type, input interface{}) error {
 	key, err := getKey(input)
 	if err != nil {
@@ -100,6 +107,10 @@ func (e *phanpy) execRemoveByKey(inputType reflect.Type, key string) (err error)
 	return
 }
 
+func (e *phanpy) execBlobRemove(key string) (err error) {
+	return db.dbBlobRemove(key)
+}
+
 func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output interface{}) {
 	key, err := getKey(object)
 	if err != nil {
@@ -115,6 +126,9 @@ func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output 
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
 	}
+	if len(objectString) > MaxStructLength {
+		return fmt.Errorf("elephant: serialized object too long to be stored")
+	}
 	err = db.dbCreate(e.getTableName(inputType), key, string(objectString))
 	if err != nil {
 		delete(e.data[inputType], key)
@@ -123,18 +137,10 @@ func (e *phanpy) execCreate(inputType reflect.Type, object interface{}) (output 
 }
 
 func (e *phanpy) execBlobCreate(key string, contents *[]byte) error {
-	if e.data[blobReflectType][key] != nil {
-		return fmt.Errorf("elephant: trying to create a blob with id in use")
+	if len(*contents) > MaxBlobsLength {
+		return fmt.Errorf("elephant: blob too big to be stored")
 	}
-	e.data[blobReflectType][key] = copyEntireObject(contents)
-	if len(contents) > MaxStructLength {
-		return fmt.Errorf()
-	}
-	err = db.dbCreate(e.getTableName(blobReflectType), key, string(objectString))
-	if err != nil {
-		delete(e.data[blobReflectType], key)
-	}
-	return key
+	return db.dbBlobCreate(key, contents)
 }
 
 func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err error) {
@@ -151,6 +157,9 @@ func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
 	}
+	if len(objectString) > MaxStructLength {
+		return fmt.Errorf("elephant: serialized object too long to be stored")
+	}
 	err = db.dbUpdate(e.getTableName(inputType), key, string(objectString))
 	if err != nil {
 		e.data[inputType][key] = oldObject
@@ -161,6 +170,10 @@ func (e *phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 		}
 	}
 	return
+}
+
+func (e *phanpy) execBlobUpdate(key string, contents *[]byte) (err error) {
+	return db.dbBlobUpdate(key, contents)
 }
 
 func (e *phanpy) execExists(inputType reflect.Type, key string) (output bool) {
@@ -213,10 +226,14 @@ func (e *phanpy) mainRoutine() {
 			action.output <- e.execExistsBy(action.inputType, action.object[0].(string), action.object[1])
 		case actionNextID:
 			action.output <- e.execNextID(action.inputType)
-		case actionBlobCreate:
-			action.output <- e.execBlobCreate(action.inputType, action.object[0])
-		case actionBlobRemove:
 		case actionBlobRetrieve:
+			action.output <- e.execBlobRetrieve(action.object[0].(string))
+		case actionBlobCreate:
+			action.output <- e.execBlobCreate(action.object[0].(string), action.object[1].(*[]byte))
+		case actionBlobRemove:
+			action.output <- e.execBlobRemove(action.object[0].(string))
+		case actionBlobUpdate:
+			action.output <- e.execBlobUpdate(action.object[0].(string), action.object[1].(*[]byte))
 		default:
 			action.output <- nil
 		}

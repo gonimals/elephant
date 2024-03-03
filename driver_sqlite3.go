@@ -16,6 +16,9 @@ const maxRegexLength = "40"
 // Regular expression used to check that no SQL injection is produced
 var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + ContextSymbol + "]{1," + maxRegexLength + "}$")
 
+// Name for the table to store byte blobs
+const sqlite3BlobsTableName = "blobs"
+
 // These are error strings returned by the driver
 const errorSQLNoSuchTable = "no such table: "
 const errorSQLNoRowsInResultSet = "sql: no rows in result set"
@@ -46,6 +49,7 @@ type typeHandler struct {
 type driverSqlite3 struct {
 	db           *sql.DB
 	checkedTypes map[string]*typeHandler //checkedTypes stores types that have been already handled during the execution
+	blobStmts    map[int]*sql.Stmt
 }
 
 func init() {
@@ -65,11 +69,40 @@ func sqlite3dbConnect(dataSourceName string) (output *driverSqlite3, err error) 
 		log.Fatalln(err.Error())
 	}
 	output.checkedTypes = make(map[string]*typeHandler)
+	output.ensureBlobsTableIsHandled()
 	return
 }
 
 func (d *driverSqlite3) dbClose() {
 	d.db.Close()
+}
+
+// ensureBlobsTableIsHandled checks if the blobs table exists and creates it if not
+func (d *driverSqlite3) ensureBlobsTableIsHandled() {
+	//Start the handling tasks
+	var testID string
+	err := d.db.QueryRow(fmt.Sprintf(sqlite3CheckTable, sqlite3BlobsTableName)).Scan(&testID)
+	if err == nil || strings.Contains(err.Error(), errorSQLNoRowsInResultSet) {
+		// Table exists and can be empty
+	} else if err.Error() == errorSQLNoSuchTable+sqlite3BlobsTableName {
+		// Table does not exist. Let's create it
+		_, err := d.db.Exec(fmt.Sprintf("create table %s ( id text primary key, value longblob )", sqlite3BlobsTableName))
+		if err != nil {
+			log.Fatalln("Can't create blobs table", err)
+		}
+	} else {
+		log.Fatalln("Unhandled error:", err)
+	}
+	d.blobStmts = make(map[int]*sql.Stmt)
+	for i := stmtRetrieve; i <= stmtUpdate; i++ {
+		d.blobStmts[i], err = d.db.Prepare(fmt.Sprintf(sqliteCreationMap[i], sqlite3BlobsTableName))
+		if err != nil {
+			for _, stmt := range d.blobStmts {
+				stmt.Close()
+			}
+			log.Fatalln("Cannot initialize blobs statements", err.Error())
+		}
+	}
 }
 
 // createTypeHandler just populates the struct with the required SQL statements
@@ -110,7 +143,7 @@ func (d *driverSqlite3) ensureTableIsHandled(input string) (th *typeHandler) {
 		// Table does not exist. Let's create it
 		_, err := d.db.Exec(fmt.Sprintf(sqlite3CreateTable, input))
 		if err != nil {
-			log.Fatalln("Can't create table for "+th.name, err)
+			log.Fatalln("Can't create table for "+input, err)
 		}
 	} else {
 		log.Fatalln("Unhandled error:", err)
@@ -163,5 +196,42 @@ func (d *driverSqlite3) dbCreate(inputType string, key string, input string) (er
 func (d *driverSqlite3) dbUpdate(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	_, err = handledType.stmts[stmtUpdate].Exec(input, key)
+	return
+}
+
+func (d *driverSqlite3) dbBlobRetrieve(key string) (output *[]byte, err error) {
+	err = d.blobStmts[stmtRetrieve].QueryRow(key).Scan(&output)
+	return
+}
+func (d *driverSqlite3) dbBlobCreate(key string, input *[]byte) (err error) {
+	_, err = d.blobStmts[stmtInsert].Exec(key, input)
+	return
+}
+func (d *driverSqlite3) dbBlobUpdate(key string, input *[]byte) (err error) {
+	result, err := d.blobStmts[stmtUpdate].Exec(input, key)
+	if err != nil {
+		return
+	}
+	affectedRows, err := result.RowsAffected()
+	if err != nil {
+		return
+	}
+	if affectedRows != 1 {
+		return fmt.Errorf("sqlite3: blob update modified %d rows", affectedRows)
+	}
+	return
+}
+func (d *driverSqlite3) dbBlobRemove(key string) (err error) {
+	result, err := d.blobStmts[stmtDelete].Exec(key)
+	if err != nil {
+		return
+	}
+	affectedRows, err := result.RowsAffected()
+	if err != nil {
+		return
+	}
+	if affectedRows != 1 {
+		return fmt.Errorf("sqlite3: blob delete modified %d rows", affectedRows)
+	}
 	return
 }

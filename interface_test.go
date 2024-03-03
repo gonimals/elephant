@@ -178,3 +178,40 @@ func TestIncorrectUri(t *testing.T) {
 		t.Error("Uninitialized library is not giving error when asking for an instance")
 	}
 }
+
+func TestCorrectBlobs(t *testing.T) {
+	os.Remove(temporaryDB)
+	err := Initialize("sqlite3://" + temporaryDB)
+	if err != nil {
+		t.Error("Initialization failed", err)
+	}
+	defer Close()
+
+	if err = MainContext.BlobCreate("1", &[]byte{0x00}); err != nil {
+		t.Error("Creation of simple blob should not fail")
+	}
+	if err = MainContext.BlobCreate("1", &[]byte{0x00}); err == nil {
+		t.Error("Creation repeated blob should fail")
+	}
+	if !blobsEqual(MainContext.BlobRetrieve("1"), &[]byte{0x00}) {
+		t.Error("Retrieved blob and the original one should be equal")
+	}
+	if MainContext.BlobRetrieve("2") != nil {
+		t.Error("Retrieved blob should be nil")
+	}
+	if MainContext.BlobUpdate("1", &[]byte{0x01}) != nil {
+		t.Error("Update without errors should be nil")
+	}
+	if MainContext.BlobUpdate("2", &[]byte{0x01}) == nil {
+		t.Error("Update of unexistent blob should not be nil")
+	}
+	if MainContext.BlobRemove("2") == nil {
+		t.Error("Fake deletion didn't give any error")
+	}
+	if MainContext.BlobRemove("1") != nil {
+		t.Error("Remove operation failed, when should be correct:", err)
+	}
+	if MainContext.BlobRemove("1") == nil {
+		t.Error("Remove operation successful, when should be incorrect:", err)
+	}
+}

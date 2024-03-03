@@ -24,6 +24,11 @@ type dbDriver interface {
 	dbCreate(inputType string, key string, input string) (err error)
 	dbUpdate(inputType string, key string, input string) (err error)
 	dbRemove(inputType string, key string) (err error)
+
+	dbBlobRetrieve(key string) (output *[]byte, err error)
+	dbBlobCreate(key string, input *[]byte) (err error)
+	dbBlobUpdate(key string, input *[]byte) (err error)
+	dbBlobRemove(key string) (err error)
 }
 
 var currentElephants map[string]Elephant
