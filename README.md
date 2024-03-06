@@ -13,6 +13,7 @@ This library will store every instance inside a table with the name of the struc
 Supported URIs, right now, follow this criteria:
 
 - `sqlite3:path/to/file.db` (if the file doesn't exist, it will be created)
+- `mysql:database@user:password@host:port`
 
 # Compiling and testing
 ```
@@ -23,6 +24,21 @@ go mod tidy
 sqlite3 /tmp/foo.db
 .tables
 select * from structCheck;
+```
+
+## MySQL
+To perform MySQL tests, create a docker container with the following configuration:
+```bash
+docker run -d -p33060:3306 --name elephant-testing -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=true mariadb:lts
+mysql -u root -h 127.0.0.1 --port=33060
+create database elephant;
+quit;
+```
+
+Run it everytime the checks must be run:
+
+```bash
+docker start elephant-testing
 ```
 
 # Example usage

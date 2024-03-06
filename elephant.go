@@ -6,7 +6,7 @@ import (
 	"regexp"
 
 	"github.com/gonimals/elephant/internal/db"
-	"github.com/gonimals/elephant/internal/db/sqlite3"
+	"github.com/gonimals/elephant/internal/db/sql"
 	"github.com/gonimals/elephant/internal/phanpy"
 )
 
@@ -76,7 +76,7 @@ type Elephant interface {
 func Initialize(uri string) (err error) {
 	sqlite3Regexp := regexp.MustCompile(`sqlite3://`)
 	if sqlite3split := sqlite3Regexp.Split(uri, 2); len(sqlite3split) == 2 {
-		dbDriver, err = sqlite3.Connect(sqlite3split[1])
+		dbDriver, err = sql.ConnectSqlite3(sqlite3split[1])
 	} else {
 		err = fmt.Errorf("elephant: unsupported uri string: %s", uri)
 	}
