@@ -6,7 +6,7 @@ import (
 
 var /*const*/ stmtsMysql = map[int]string{
 	stmtCheckTable:  "select id from %s limit 1",
-	stmtCreateTable: "create table %s ( id varchar(%d) primary key, value longtext )",
+	stmtCreateTable: "create table %s ( id varchar(%d) primary key, value json )",
 	stmtRetrieve:    "select value from %s where id = ?",
 	stmtRetrieveAll: "select id, value from %s",
 	stmtInsert:      "insert into %s (id, value) values (?, ?)",

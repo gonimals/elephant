@@ -11,17 +11,17 @@ import (
 	_ "github.com/mattn/go-sqlite3" //Add support for sqlite3 db
 )
 
+// MaxKeyLength sets the maximum string length for table keys
+const MaxKeyLength = 512
+
 // maxRegexLength decides the maximum length for any string checked with alphanumericRegexp
 const maxRegexLength = "40"
-
-// maxKeyLength sets the maximum string length for table keys
-const maxKeyLength = 512
 
 // Regular expression used to check that no SQL injection is produced
 var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + util.ContextSymbol + "]{1," + maxRegexLength + "}$")
 
 // Name for the table to store byte blobs
-const blobsTableName = "blobs"
+const BlobsTableName = "blobs"
 
 const errorPossibleSQLi = " could be a SQL injection attack"
 
@@ -78,12 +78,12 @@ func (d *driver) Close() {
 func (d *driver) ensureBlobsTableIsHandled() {
 	//Start the handling tasks
 	var testID string
-	err := d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], blobsTableName)).Scan(&testID)
+	err := d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], BlobsTableName)).Scan(&testID)
 	if err == nil || d.driverMsgs[msgErrorNoRowsInResultSet].MatchString(err.Error()) {
 		// Table exists and can be empty
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
-		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateBlobs], blobsTableName, maxKeyLength))
+		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateBlobs], BlobsTableName, MaxKeyLength))
 		if err != nil {
 			log.Fatalln("Can't create blobs table", err)
 		}
@@ -92,7 +92,7 @@ func (d *driver) ensureBlobsTableIsHandled() {
 	}
 	d.blobStmts = make(map[int]*sql.Stmt)
 	for i := stmtRetrieve; i <= stmtUpdate; i++ {
-		d.blobStmts[i], err = d.db.Prepare(fmt.Sprintf(d.baseStmts[i], blobsTableName))
+		d.blobStmts[i], err = d.db.Prepare(fmt.Sprintf(d.baseStmts[i], BlobsTableName))
 		if err != nil {
 			log.Fatalln("Cannot initialize blobs statements", err.Error())
 		}
@@ -135,7 +135,7 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
 		// Table exists and can be empty
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
-		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateTable], input, maxKeyLength))
+		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateTable], input, MaxKeyLength))
 		if err != nil {
 			log.Fatalln("Can't create table for "+input, err)
 		}
