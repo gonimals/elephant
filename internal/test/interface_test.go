@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gonimals/elephant"
@@ -180,6 +181,45 @@ func TestIncorrectUri(t *testing.T) {
 	}
 	if err == nil {
 		t.Error("Unelephant.Initialized library is not giving error when asking for an instance")
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	os.Remove(temporaryDB)
+	err := elephant.Initialize("sqlite3://" + temporaryDB)
+	if err != nil {
+		t.Error("Initialization failed", err)
+	}
+	defer elephant.Close()
+	structCheckType := reflect.TypeOf((*structCheck)(nil))
+
+	key, err := elephant.MainContext.Create(&structCheck{
+		Myint64:  0,
+		Mystring: "1",
+		Myint:    234,
+		Mybool:   true})
+
+	if key != "1" || err != nil {
+		t.Error("Creation failed")
+	}
+
+	workingInstance := elephant.MainContext.Retrieve(structCheckType, "1")
+	if workingInstance == nil {
+		t.Error("Retrieve operation failed")
+	}
+	validInstance := workingInstance.(*structCheck)
+	validInstance.Mystring = strings.Repeat("A", util.MaxStructLength)
+	err = elephant.MainContext.Update(validInstance)
+	if err == nil {
+		t.Error("Instance should be too long to be stored in the database")
+	}
+	workingInstance = elephant.MainContext.Retrieve(structCheckType, "1")
+	if workingInstance == nil {
+		t.Error("Retrieve operation failed")
+	}
+	validInstance = workingInstance.(*structCheck)
+	if len(validInstance.Mystring) == util.MaxStructLength {
+		t.Error("The database runtime is not consistent with the stored data")
 	}
 }
 

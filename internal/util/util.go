@@ -44,6 +44,14 @@ func CopyEntireObject(src interface{}) interface{} {
 	return LoadObjectFromJson(reflect.TypeOf(src), objectString)
 }
 
+func CopyMapOfObjects(src map[string]interface{}) map[string]interface{} {
+	output := map[string]interface{}{}
+	for key, object := range src {
+		output[key] = CopyEntireObject(object)
+	}
+	return output
+}
+
 // CompareInstances returns true if both instance JSONs are equal
 func CompareInstances(first, second interface{}) bool {
 	string1, err := json.Marshal(first)

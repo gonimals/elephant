@@ -61,7 +61,7 @@ func (e *Phanpy) execManageType(inputType reflect.Type) error {
 }
 
 func (e *Phanpy) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
-	return e.Data[inputType][key]
+	return util.CopyEntireObject(e.Data[inputType][key])
 }
 
 func (e *Phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {
@@ -74,14 +74,14 @@ func (e *Phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object
 	}
 	for _, elem := range e.Data[inputType] {
 		if object == reflect.ValueOf(elem).Elem().FieldByName(attribute).Interface() {
-			return elem
+			return util.CopyEntireObject(elem)
 		}
 	}
 	return nil
 }
 
 func (e *Phanpy) execRetrieveAll(inputType reflect.Type) (output interface{}) {
-	return e.Data[inputType]
+	return util.CopyMapOfObjects(e.Data[inputType])
 }
 
 func (e *Phanpy) execBlobRetrieve(key string) (output interface{}) {
@@ -154,7 +154,6 @@ func (e *Phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 	if !existingObject {
 		return fmt.Errorf("elephant: trying to update unexistent object")
 	}
-	// e.data[inputType][key] = object
 	objectString, err := json.Marshal(object)
 	if err != nil {
 		log.Fatalln("elephant: can't convert object to json:", object)
@@ -166,10 +165,7 @@ func (e *Phanpy) execUpdate(inputType reflect.Type, object interface{}) (err err
 	if err != nil {
 		e.Data[inputType][key] = oldObject
 	} else {
-		err := util.CopyInstance(object, oldObject)
-		if err != nil {
-			log.Fatalln(err)
-		}
+		e.Data[inputType][key] = util.CopyEntireObject(object)
 	}
 	return
 }
@@ -261,4 +257,14 @@ func (e *Phanpy) getTableName(inputType reflect.Type) (output string) {
 	}
 	output += typeDescriptor.Name
 	return
+}
+
+// restoreObjectFromDB is meant to be used when an update operation could not be completed
+func (e *Phanpy) restoreObjectFromDB(inputType reflect.Type, key string) error {
+	data, err := e.dbDriver.Retrieve(inputType.Name(), key)
+	if err != nil {
+		return err
+	}
+	e.Data[inputType][key] = util.LoadObjectFromJson(inputType, []byte(data))
+	return nil
 }
