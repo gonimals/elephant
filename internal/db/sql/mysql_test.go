@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// Refer to the README.md for the commands to perform these tests with this uri
 const mysqlTestDB = "root:@tcp(127.0.0.1:33060)/elephant"
 
 func TestMysql(t *testing.T) {

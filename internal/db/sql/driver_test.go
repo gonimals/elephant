@@ -2,6 +2,7 @@ package sql
 
 import (
 	"log"
+	"strings"
 	"testing"
 
 	"github.com/gonimals/elephant/internal/util"
@@ -13,7 +14,7 @@ func testDriver(t *testing.T, db *driver) {
 }
 
 func testBasicUsage(t *testing.T, db *driver) {
-	err := db.Create("test_table", "1", "asdfasdf")
+	err := db.Create("test_table", "1", "{ \"fdsa\": [] }")
 	if err != nil {
 		t.Error("simple create operation fails:", err)
 	}
@@ -21,14 +22,14 @@ func testBasicUsage(t *testing.T, db *driver) {
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
-	if output != "asdfasdf" {
+	if output != "{ \"fdsa\": [] }" {
 		t.Error("retrieved string is not the original")
 	}
-	err = db.Update("test_table", "1", "fdsafdsa")
+	err = db.Update("test_table", "1", "{ \"asdf\": 2 }")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
-	err = db.Update("test_table", "1", "fdsafdsa")
+	err = db.Update("test_table", "1", "[]")
 	if err != nil {
 		t.Error("simple update operation fails:", err)
 	}
@@ -36,7 +37,7 @@ func testBasicUsage(t *testing.T, db *driver) {
 	if err != nil {
 		t.Error("simple retrieve operation fails:", err)
 	}
-	if output != "fdsafdsa" {
+	if output != "[]" {
 		t.Errorf("retrieved string is not the updated one")
 	}
 	err = db.Remove("test_table", "1")
@@ -88,50 +89,38 @@ func testBasicUsage(t *testing.T, db *driver) {
 }
 
 func testLimits(t *testing.T, db *driver) {
-	longStringBase := "0123456789"
-	var longString string
-	for i := 0; i < MaxKeyLength/10+1; i++ {
-		longString += longStringBase
-	}
-	err := db.BlobCreate(longString, &[]byte{0x00})
+	longString := strings.Repeat("A", MaxKeyLength+1)
+	err := db.Create("limits", longString, "asdf")
 	if err == nil {
 		t.Error("too long key should fail")
 	}
-	log.Println("long blob key error:", err)
-
-	err = db.Create("limits", longString, "asdf")
+	err = db.BlobCreate(longString, &[]byte{0x00})
 	if err == nil {
 		t.Error("too long key should fail")
 	}
-	log.Println("long basic key error:", err)
-
-	for i := 0; i < 10000; i++ {
-		longString += longStringBase
-	}
-
+	longString = strings.Repeat("A", 1024*1024*1024) //1GB
+	log.Println("A very big query will be executed. A database driver error is acceptable right now")
 	err = db.Create("limits", "longvalue", longString)
 	if err == nil {
 		t.Error("too long value should fail")
 	}
-	log.Println("long basic value error:", err)
+	log.Println("The big query has finished. No more errors until the next big query are acceptable")
 
 	err = db.BlobRemove("longvalue")
 	if err == nil {
 		t.Error("long value delete operation should fail")
 	}
+	longString = ""
 
-	longBlob := make([]byte, 256*256*256+256)
-	for i := range longBlob {
-		longBlob[i] = 0x02
-	}
+	longBlob := []byte(strings.Repeat("A", 1024*1024*1024)) //1GB
+	log.Println("A very big query will be executed. A database driver error is acceptable right now")
 	err = db.BlobCreate("longvalue", &longBlob)
 	if err == nil {
 		t.Error("too long blob should fail")
 	}
+	log.Println("The big query has finished. No more errors until the next big query are acceptable")
 	err = db.BlobRemove("longvalue")
 	if err == nil {
 		t.Error("blob delete operation should fail")
 	}
-	log.Println("long blob error:", err)
-
 }

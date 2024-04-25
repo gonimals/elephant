@@ -29,10 +29,10 @@ select * from structCheck;
 ## MySQL
 To perform MySQL tests, create a docker container with the following configuration:
 ```bash
-docker run -d -p33060:3306 --name elephant-testing -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=true mariadb:lts
-mysql -u root -h 127.0.0.1 --port=33060
-create database elephant;
-quit;
+docker run -d -p33060:3306 --name elephant-testing \
+-e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=true \
+-e MARIADB_DATABASE=elephant \
+mariadb:lts
 ```
 
 Run it everytime the checks must be run:
@@ -41,12 +41,17 @@ Run it everytime the checks must be run:
 docker start elephant-testing
 ```
 
-# Example usage
+You can check the access to the instance with:
+
+```bash
+mysql -u root -h 127.0.0.1 --port=33060
 ```
+
+# Example usage
+```golang
 err := Initialize("sqlite3://example.db")
 if err != nil {
     t.Error("Initialization failed", err)
 }
 defer Close()
-
 ```

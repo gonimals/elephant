@@ -183,6 +183,9 @@ func (d *driver) Remove(inputType string, key string) (err error) {
 
 func (d *driver) Create(inputType string, key string, input string) (err error) {
 	handledType := d.ensureTableIsHandled(inputType)
+	if len(key) > MaxKeyLength {
+		return fmt.Errorf("sql: key too long (%d > %d)", len(key), MaxKeyLength)
+	}
 	_, err = handledType.stmts[stmtInsert].Exec(key, input)
 	return
 }
@@ -198,6 +201,9 @@ func (d *driver) BlobRetrieve(key string) (output *[]byte, err error) {
 	return
 }
 func (d *driver) BlobCreate(key string, input *[]byte) (err error) {
+	if len(key) > MaxKeyLength {
+		return fmt.Errorf("sql: key too long (%d > %d)", len(key), MaxKeyLength)
+	}
 	_, err = d.blobStmts[stmtInsert].Exec(key, input)
 	return
 }
@@ -211,7 +217,7 @@ func (d *driver) BlobUpdate(key string, input *[]byte) (err error) {
 		return
 	}
 	if affectedRows != 1 {
-		return fmt.Errorf("sqlite3: blob update modified %d rows", affectedRows)
+		return fmt.Errorf("sql: blob update modified %d rows", affectedRows)
 	}
 	return
 }
@@ -225,7 +231,7 @@ func (d *driver) BlobRemove(key string) (err error) {
 		return
 	}
 	if affectedRows != 1 {
-		return fmt.Errorf("sqlite3: blob delete modified %d rows", affectedRows)
+		return fmt.Errorf("sql: blob delete modified %d rows", affectedRows)
 	}
 	return
 }
