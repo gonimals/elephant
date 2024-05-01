@@ -61,7 +61,10 @@ func (e *Phanpy) execManageType(inputType reflect.Type) error {
 }
 
 func (e *Phanpy) execRetrieve(inputType reflect.Type, key string) (output interface{}) {
-	return util.CopyEntireObject(e.Data[inputType][key])
+	if object, exists := e.Data[inputType][key]; exists {
+		return util.CopyEntireObject(object)
+	}
+	return nil
 }
 
 func (e *Phanpy) execRetrieveBy(inputType reflect.Type, attribute string, object interface{}) interface{} {

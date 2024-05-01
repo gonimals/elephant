@@ -105,6 +105,9 @@ func TestCorrectFunctions(t *testing.T) {
 	if !util.CompareInstances(elephant.MainContext.RetrieveBy(structCheckType, "Myint", structCheckInstance.Myint), structCheckInstance) {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
+	if elephant.MainContext.Retrieve(structCheckType, "unexistent") != nil {
+		t.Error("Retrieved instance should be nil")
+	}
 	if elephant.MainContext.RetrieveBy(structCheckType, "unexistent", nil) != nil {
 		t.Error("Retrieved instance should be nil")
 	}
