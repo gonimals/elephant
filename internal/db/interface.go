@@ -7,6 +7,7 @@ type Driver interface {
 	Create(inputType string, key string, input string) (err error)
 	Update(inputType string, key string, input string) (err error)
 	Remove(inputType string, key string) (err error)
+	GetContextSymbol() string
 
 	BlobRetrieve(key string) (output *[]byte, err error)
 	BlobCreate(key string, input *[]byte) (err error)

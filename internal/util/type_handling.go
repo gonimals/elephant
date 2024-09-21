@@ -2,12 +2,8 @@ package util
 
 import (
 	"fmt"
-	"log"
 	"reflect"
-	"strings"
 )
-
-const ContextSymbol = "."
 
 // MaxStructLength defines how long can be a structure converted to JSON to be stored
 const MaxStructLength = 65535 //64k
@@ -40,9 +36,6 @@ func ExamineType(input reflect.Type) (output *LearntType, err error) {
 	output.Fields = make(map[string]reflect.Type)
 	output.Updates = make(map[string]struct{})
 	output.Name = input.Name()
-	if strings.Contains(output.Name, ContextSymbol) {
-		log.Fatalln("Type name " + output.Name + " contains the character " + ContextSymbol + " which is also used as context symbol. This should never happen.")
-	}
 
 	for i := 0; i < input.NumField(); i++ {
 		field := input.Field(i)

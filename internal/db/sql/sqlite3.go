@@ -20,5 +20,5 @@ var /*const*/ msgsSqlite3 = map[int]*regexp.Regexp{
 
 // Connect should be the first method called to initialize the db connection
 func ConnectSqlite3(dataSourceName string) (output *driver, err error) {
-	return connect("sqlite3", dataSourceName, stmtsSqlite3, msgsSqlite3)
+	return connect("sqlite3", dataSourceName, stmtsSqlite3, msgsSqlite3, ".")
 }

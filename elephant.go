@@ -3,7 +3,7 @@ package elephant
 import (
 	"fmt"
 	"reflect"
-	"regexp"
+	"strings"
 
 	"github.com/gonimals/elephant/internal/db"
 	"github.com/gonimals/elephant/internal/db/sql"
@@ -74,10 +74,12 @@ type Elephant interface {
 
 // Initialize requires a supported uri using one of the following supported formats
 func Initialize(uri string) (err error) {
-	sqlite3Regexp := regexp.MustCompile(`sqlite3://`)
-	if sqlite3split := sqlite3Regexp.Split(uri, 2); len(sqlite3split) == 2 {
-		dbDriver, err = sql.ConnectSqlite3(sqlite3split[1])
-	} else {
+	switch {
+	case strings.HasPrefix(uri, "sqlite3:"):
+		dbDriver, err = sql.ConnectSqlite3(strings.TrimPrefix(uri, "sqlite3:"))
+	case strings.HasPrefix(uri, "mysql:"):
+		dbDriver, err = sql.ConnectMySQL(strings.TrimPrefix(uri, "mysql:"))
+	default:
 		err = fmt.Errorf("elephant: unsupported uri string: %s", uri)
 	}
 	if err == nil {

@@ -13,7 +13,7 @@ This library will store every instance inside a table with the name of the struc
 Supported URIs, right now, follow this criteria:
 
 - `sqlite3:path/to/file.db` (if the file doesn't exist, it will be created)
-- `mysql:database@user:password@host:port`
+- `mysql:user:password@tcp(hostname:port)/database`
 
 # Compiling and testing
 ```
@@ -44,12 +44,12 @@ docker start elephant-testing
 You can check the access to the instance with:
 
 ```bash
-mysql -u root -h 127.0.0.1 --port=33060
+mysql -u root -h 127.0.0.1 --port=33060 elephant
 ```
 
 # Example usage
 ```golang
-err := Initialize("sqlite3://example.db")
+err := Initialize("sqlite3:example.db")
 if err != nil {
     t.Error("Initialization failed", err)
 }

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql" //Add support for mysql db
-	"github.com/gonimals/elephant/internal/util"
-	_ "github.com/mattn/go-sqlite3" //Add support for sqlite3 db
+	_ "github.com/mattn/go-sqlite3"    //Add support for sqlite3 db
 )
 
 // MaxKeyLength sets the maximum string length for table keys
@@ -18,7 +18,7 @@ const MaxKeyLength = 512
 const maxRegexLength = "40"
 
 // Regular expression used to check that no SQL injection is produced
-var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_\\" + util.ContextSymbol + "]{1," + maxRegexLength + "}$")
+var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z0-9_]{1," + maxRegexLength + "}$")
 
 // Name for the table to store byte blobs
 const BlobsTableName = "blobs"
@@ -49,15 +49,16 @@ type typeHandler struct {
 }
 
 type driver struct {
-	db           *sql.DB
-	checkedTypes map[string]*typeHandler //checkedTypes stores types that have been already handled during the execution
-	blobStmts    map[int]*sql.Stmt
-	baseStmts    map[int]string
-	driverMsgs   map[int]*regexp.Regexp
+	db            *sql.DB
+	checkedTypes  map[string]*typeHandler //checkedTypes stores types that have been already handled during the execution
+	blobStmts     map[int]*sql.Stmt
+	baseStmts     map[int]string
+	driverMsgs    map[int]*regexp.Regexp
+	contextSymbol string
 }
 
 // Connect should be the first method called to initialize the db connection
-func connect(driverID string, dataSourceName string, baseStmts map[int]string, driverMsgs map[int]*regexp.Regexp) (output *driver, err error) {
+func connect(driverID string, dataSourceName string, baseStmts map[int]string, driverMsgs map[int]*regexp.Regexp, contextSymbol string) (output *driver, err error) {
 	output = new(driver)
 	output.db, err = sql.Open(driverID, dataSourceName)
 	if err != nil {
@@ -67,6 +68,7 @@ func connect(driverID string, dataSourceName string, baseStmts map[int]string, d
 	output.driverMsgs = driverMsgs
 	output.checkedTypes = make(map[string]*typeHandler)
 	output.ensureBlobsTableIsHandled()
+	output.contextSymbol = contextSymbol
 	return
 }
 
@@ -88,7 +90,8 @@ func (d *driver) ensureBlobsTableIsHandled() {
 			log.Fatalln("Can't create blobs table", err)
 		}
 	} else {
-		log.Fatalln("Unhandled error:", err)
+		log.Println("Unhandled error")
+		panic(err)
 	}
 	d.blobStmts = make(map[int]*sql.Stmt)
 	for i := stmtRetrieve; i <= stmtUpdate; i++ {
@@ -127,7 +130,7 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
 
 	//Start the handling tasks
 	var testID string
-	if !alphanumericRegexp.MatchString(input) {
+	if !alphanumericRegexp.MatchString(strings.ReplaceAll(input, d.contextSymbol, "")) {
 		log.Fatal(input + errorPossibleSQLi)
 	}
 	err := d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], input)).Scan(&testID)
@@ -140,7 +143,8 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
 			log.Fatalln("Can't create table for "+input, err)
 		}
 	} else {
-		log.Fatalln("Unhandled error:", err)
+		log.Printf("Unhandled error with query: %s", fmt.Sprintf(d.baseStmts[stmtCheckTable], input))
+		panic(err)
 	}
 	th, err = d.createTypeHandler(input)
 	if err != nil {
@@ -234,4 +238,7 @@ func (d *driver) BlobRemove(key string) (err error) {
 		return fmt.Errorf("sql: blob delete modified %d rows", affectedRows)
 	}
 	return
+}
+func (d *driver) GetContextSymbol() string {
+	return d.contextSymbol
 }

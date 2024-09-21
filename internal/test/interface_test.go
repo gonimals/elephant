@@ -12,10 +12,54 @@ import (
 	"github.com/gonimals/elephant/internal/util"
 )
 
-func TestReuseDB(t *testing.T) {
-	os.Remove(temporaryDB)
-	err := elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
+func TestIncorrectUri(t *testing.T) {
+	err := elephant.Initialize("")
+	if err == nil {
+		t.Error("elephant.Initialize not giving error with invalid uri")
+	}
+	nilObject, err := elephant.GetElephant("")
+	if nilObject != nil {
+		t.Error("Unelephant.Initialized library is giving instances")
+	}
+	if err == nil {
+		t.Error("Unelephant.Initialized library is not giving error when asking for an instance")
+	}
+}
+
+func TestInterfaceSqlite3(t *testing.T) {
+	uri := "sqlite3:" + sqlite3TestDB
+
+	os.Remove(sqlite3TestDB)
+	testReuseDB(uri, t)
+
+	os.Remove(sqlite3TestDB)
+	testCorrectFunctions(uri, t)
+
+	os.Remove(sqlite3TestDB)
+	testUpdate(uri, t)
+
+	os.Remove(sqlite3TestDB)
+	testCorrectBlobs(uri, t)
+}
+
+func TestDriverMySQL(t *testing.T) {
+	uri := "mysql:" + mysqlTestDB
+
+	cleanMysqlTestDB()
+	testReuseDB(uri, t)
+
+	cleanMysqlTestDB()
+	testCorrectFunctions(uri, t)
+
+	cleanMysqlTestDB()
+	testUpdate(uri, t)
+
+	cleanMysqlTestDB()
+	testCorrectBlobs(uri, t)
+}
+
+func testReuseDB(uri string, t *testing.T) {
+	if err := elephant.Initialize(uri); err != nil {
 		t.Error("Initialization failed", err)
 	}
 	structCheckType := reflect.TypeOf((*structCheck)(nil))
@@ -25,12 +69,12 @@ func TestReuseDB(t *testing.T) {
 		Myint:    987,
 		Mybool:   false}
 
-	if _, err = elephant.MainContext.Create(structCheckInstance); err != nil {
+	if _, err := elephant.MainContext.Create(structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
 	elephant.Close()
-	err = elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
+
+	if err := elephant.Initialize(uri); err != nil {
 		t.Error("Renitialization failed", err)
 	}
 	retrievedStruct := elephant.MainContext.RetrieveBy(structCheckType, "Mybool", structCheckInstance.Mybool)
@@ -40,29 +84,8 @@ func TestReuseDB(t *testing.T) {
 	elephant.Close()
 }
 
-/*
-func TestStringKey(t *testing.T) {
-	os.Remove(temporaryDB)
-	err := elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
-		t.Error("Initialization failed", err)
-	}
-	defer elephant.Close()
-
-	key, err := elephant.MainContext.Create(&stringStructCheck{
-		Mystring: "Testing",
-		Mydate:   0,
-	})
-	if err != nil || key.(string) != "Testing" {
-		t.Error("Creation of struct with string key should be allowed")
-	}
-}
-*/
-
-func TestCorrectFunctions(t *testing.T) {
-	os.Remove(temporaryDB)
-	err := elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
+func testCorrectFunctions(uri string, t *testing.T) {
+	if err := elephant.Initialize(uri); err != nil {
 		t.Error("Initialization failed", err)
 	}
 	defer elephant.Close()
@@ -90,13 +113,13 @@ func TestCorrectFunctions(t *testing.T) {
 		Myint:    2345,
 		Mybool:   false}
 
-	if _, err = elephant.MainContext.Create(*structCheckInstance); err == nil {
+	if _, err := elephant.MainContext.Create(*structCheckInstance); err == nil {
 		t.Error("Creation of non pointer struct should fail")
 	}
-	if _, err = elephant.MainContext.Create(structCheckInstance); err != nil {
+	if _, err := elephant.MainContext.Create(structCheckInstance); err != nil {
 		t.Error("Creation failed")
 	}
-	if _, err = elephant.MainContext.Create(new(failingStructCheck)); err == nil {
+	if _, err := elephant.MainContext.Create(new(failingStructCheck)); err == nil {
 		t.Error("Creation of incorrect struct should fail")
 	}
 	if !util.CompareInstances(elephant.MainContext.Retrieve(structCheckType, structCheckInstance.Mystring), structCheckInstance) {
@@ -121,8 +144,8 @@ func TestCorrectFunctions(t *testing.T) {
 	if elephant.MainContext.Update(updateTest) == nil {
 		t.Error("Update of unexistent element should not be nil")
 	}
-	err = elephant.MainContext.RemoveByKey(structCheckType, "1000")
-	if err == nil {
+
+	if err := elephant.MainContext.RemoveByKey(structCheckType, "1000"); err == nil {
 		t.Error("Fake deletion didn't give any error")
 	}
 
@@ -138,8 +161,7 @@ func TestCorrectFunctions(t *testing.T) {
 	if elephant.MainContext.ExistsBy(structCheckType, "Mystring", "unexistent") {
 		t.Errorf("Exists returning true on non-existent entry")
 	}
-	err = elephant.MainContext.RemoveByKey(structCheckType, structCheckInstance.Mystring)
-	if err != nil {
+	if err := elephant.MainContext.RemoveByKey(structCheckType, structCheckInstance.Mystring); err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
 	if allInstances, _ := elephant.MainContext.RetrieveAll(structCheckType); len(allInstances) != 2 {
@@ -149,7 +171,7 @@ func TestCorrectFunctions(t *testing.T) {
 		}
 	}
 	updateTest.Mystring = "testingUpdate"
-	if elephant.MainContext.Remove(updateTest) != nil {
+	if err := elephant.MainContext.Remove(updateTest); err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
 	if allInstances, _ := elephant.MainContext.RetrieveAll(structCheckType); len(allInstances) != 1 {
@@ -158,51 +180,35 @@ func TestCorrectFunctions(t *testing.T) {
 			log.Println(key, value)
 		}
 	}
-	if elephant.MainContext.Remove(updateTest) == nil {
-		t.Error("Remove operation successful, when should be incorrect:", err)
+	if err := elephant.MainContext.Remove(updateTest); err == nil {
+		t.Error("Remove operation successful, when should be incorrect")
 	}
-	customContext, err := elephant.GetElephant("customContext")
-	if err != nil {
-		t.Error("Error getting custom context", err)
-	}
-	if _, err = customContext.Create(&structCheck{
-		Myint64:  0,
-		Mystring: `[ {name: 'item', sort: [0 ,0] } ]`,
-	}); err != nil {
-		t.Error("Creation failed with custom context")
+
+	if customContext, err := elephant.GetElephant("customContext"); err != nil {
+		t.Error("Error getting custom context:", err)
+	} else {
+		if _, err := customContext.Create(&structCheck{
+			Myint64:  0,
+			Mystring: `[ {name: 'item', sort: [0 ,0] } ]`,
+		}); err != nil {
+			t.Error("Creation failed with custom context:", err)
+		}
 	}
 }
 
-func TestIncorrectUri(t *testing.T) {
-	err := elephant.Initialize("")
-	if err == nil {
-		t.Error("elephant.Initialize not giving error with invalid uri")
-	}
-	nilObject, err := elephant.GetElephant("")
-	if nilObject != nil {
-		t.Error("Unelephant.Initialized library is giving instances")
-	}
-	if err == nil {
-		t.Error("Unelephant.Initialized library is not giving error when asking for an instance")
-	}
-}
-
-func TestUpdate(t *testing.T) {
-	os.Remove(temporaryDB)
-	err := elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
+func testUpdate(uri string, t *testing.T) {
+	if err := elephant.Initialize(uri); err != nil {
 		t.Error("Initialization failed", err)
 	}
 	defer elephant.Close()
+
 	structCheckType := reflect.TypeOf((*structCheck)(nil))
 
-	key, err := elephant.MainContext.Create(&structCheck{
+	if key, err := elephant.MainContext.Create(&structCheck{
 		Myint64:  0,
 		Mystring: "1",
 		Myint:    234,
-		Mybool:   true})
-
-	if key != "1" || err != nil {
+		Mybool:   true}); key != "1" || err != nil {
 		t.Error("Creation failed")
 	}
 
@@ -212,8 +218,7 @@ func TestUpdate(t *testing.T) {
 	}
 	validInstance := workingInstance.(*structCheck)
 	validInstance.Mystring = strings.Repeat("A", util.MaxStructLength)
-	err = elephant.MainContext.Update(validInstance)
-	if err == nil {
+	if err := elephant.MainContext.Update(validInstance); err == nil {
 		t.Error("Instance should be too long to be stored in the database")
 	}
 	workingInstance = elephant.MainContext.Retrieve(structCheckType, "1")
@@ -226,18 +231,16 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
-func TestCorrectBlobs(t *testing.T) {
-	os.Remove(temporaryDB)
-	err := elephant.Initialize("sqlite3://" + temporaryDB)
-	if err != nil {
+func testCorrectBlobs(uri string, t *testing.T) {
+	if err := elephant.Initialize(uri); err != nil {
 		t.Error("Initialization failed", err)
 	}
 	defer elephant.Close()
 
-	if err = elephant.MainContext.BlobCreate("1", &[]byte{0x00}); err != nil {
+	if err := elephant.MainContext.BlobCreate("1", &[]byte{0x00}); err != nil {
 		t.Error("Creation of simple blob should not fail")
 	}
-	if err = elephant.MainContext.BlobCreate("1", &[]byte{0x00}); err == nil {
+	if err := elephant.MainContext.BlobCreate("1", &[]byte{0x00}); err == nil {
 		t.Error("Creation repeated blob should fail")
 	}
 	if !util.BlobsEqual(elephant.MainContext.BlobRetrieve("1"), &[]byte{0x00}) {
@@ -255,10 +258,10 @@ func TestCorrectBlobs(t *testing.T) {
 	if elephant.MainContext.BlobRemove("2") == nil {
 		t.Error("Fake deletion didn't give any error")
 	}
-	if elephant.MainContext.BlobRemove("1") != nil {
+	if err := elephant.MainContext.BlobRemove("1"); err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
-	if elephant.MainContext.BlobRemove("1") == nil {
+	if err := elephant.MainContext.BlobRemove("1"); err == nil {
 		t.Error("Remove operation successful, when should be incorrect:", err)
 	}
 }

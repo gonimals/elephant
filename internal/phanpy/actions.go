@@ -252,7 +252,7 @@ func newInternalAction(code int, inputType reflect.Type, object ...interface{}) 
 
 func (e *Phanpy) getTableName(inputType reflect.Type) (output string) {
 	if e.Context != "" {
-		output = e.Context + util.ContextSymbol
+		output = e.Context + e.dbDriver.GetContextSymbol()
 	}
 	typeDescriptor, err := util.ExamineType(inputType)
 	if err != nil {
