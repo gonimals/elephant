@@ -44,10 +44,10 @@ func CopyEntireObject(src interface{}) interface{} {
 	return LoadObjectFromJson(reflect.TypeOf(src), objectString)
 }
 
-func CopyMapOfObjects(src map[string]interface{}) map[string]interface{} {
-	output := map[string]interface{}{}
+func CopyMapOfObjects[outputType interface{}](src map[string]interface{}) map[string]outputType {
+	output := map[string]outputType{}
 	for key, object := range src {
-		output[key] = CopyEntireObject(object)
+		output[key] = CopyEntireObject(object).(outputType)
 	}
 	return output
 }

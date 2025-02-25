@@ -49,9 +49,9 @@ mysql -u root -h 127.0.0.1 --port=33060 elephant
 
 # Example usage
 ```golang
-err := Initialize("sqlite3:example.db")
+err := elephant.Initialize("sqlite3:example.db")
 if err != nil {
-    t.Error("Initialization failed", err)
+    log.Fatalln("Initialization failed:", err)
 }
-defer Close()
+defer elephant.Close()
 ```

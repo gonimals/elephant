@@ -45,8 +45,8 @@ func testBasicUsage(t *testing.T, db *driver) {
 		t.Error("simple delete operation fails:", err)
 	}
 	output, err = db.Retrieve("test_table", "1")
-	if err == nil {
-		t.Error("retrieve operation of deleted item doesn't give error")
+	if err != nil {
+		t.Error("retrieve operation of deleted item gives an error")
 	} else if output != "" {
 		t.Error("retrieve operation of deleted item gives output:", output)
 	}

@@ -2,6 +2,7 @@ package sql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -157,6 +158,9 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
 func (d *driver) Retrieve(inputType string, key string) (output string, err error) {
 	handledType := d.ensureTableIsHandled(inputType)
 	err = handledType.stmts[stmtRetrieve].QueryRow(key).Scan(&output)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
 	return
 }
 
