@@ -17,7 +17,7 @@ Supported URIs, right now, follow this criteria:
 
 # Compiling and testing
 ```
-go get -u .
+go get -u ./...
 go test -cover
 go mod tidy
 
