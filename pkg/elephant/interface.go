@@ -24,7 +24,7 @@ func Initialize(uri string) (err error) {
 		return
 	}
 
-	data = make(map[reflect.Type](map[string]interface{}))
+	data = make(map[reflect.Type](map[string]any))
 	learntTypes = make(map[reflect.Type]*util.LearntType)
 	channel = make(chan *internalAction)
 	managedTypes = make(map[reflect.Type]bool)
@@ -38,7 +38,7 @@ func Initialize(uri string) (err error) {
 }
 
 // Retrieve gets one element from a specific type filtering by key. Returns the element if found and nil if not
-func Retrieve[inputType interface{}](key string) *inputType {
+func Retrieve[inputType any](key string) *inputType {
 	checkInitialization()
 	action := newInternalAction(actionRetrieve, reflect.TypeFor[*inputType](), key)
 	channel <- action
@@ -53,15 +53,17 @@ func Retrieve[inputType interface{}](key string) *inputType {
 }
 
 // RetrieveBy gets one element from a specific type filtering by other attribute. Returns the element if found and nil if parameters are incorrect or the element is not found
-func RetrieveBy[inputType any](attribute string, input interface{}) *inputType {
+func RetrieveBy[inputType any](attribute string, input any) (*inputType, error) {
 	checkInitialization()
 	action := newInternalAction(actionRetrieveBy, reflect.TypeFor[*inputType](), attribute, input)
 	channel <- action
 	switch v := (<-action.output).(type) {
+	case error:
+		return nil, v
 	case *inputType:
-		return v
+		return v, nil
 	case nil:
-		return nil
+		return nil, nil
 	default:
 		panic(v)
 	}
@@ -73,8 +75,8 @@ func RetrieveAll[inputType any]() (map[string]*inputType, error) {
 	action := newInternalAction(actionRetrieveAll, reflect.TypeFor[*inputType](), nil)
 	channel <- action
 	switch v := (<-action.output).(type) {
-	case map[string]interface{}:
-		return util.CopyMapOfObjects[*inputType](v), nil
+	case map[string]any:
+		return util.CopyMapOfObjects[*inputType](v)
 	case error:
 		return nil, v
 	case nil:
@@ -85,7 +87,7 @@ func RetrieveAll[inputType any]() (map[string]*inputType, error) {
 }
 
 // Remove deletes one element from the database. Returns err if the object does not exist
-func Remove(input interface{}) error {
+func Remove(input any) error {
 	checkInitialization()
 	action := newInternalAction(actionRemove, reflect.TypeOf(input), input)
 	channel <- action
@@ -109,7 +111,7 @@ func RemoveByKey[inputType any](key string) error {
 }
 
 // Update modifies an element on the database
-func Update(input interface{}) error {
+func Update(input any) error {
 	checkInitialization()
 	action := newInternalAction(actionUpdate, reflect.TypeOf(input), input)
 	channel <- action
@@ -121,7 +123,7 @@ func Update(input interface{}) error {
 }
 
 // Create adds one element to the database. If the key attribute value is empty (""), a new one will be assigned
-func Create(input interface{}) (string, error) {
+func Create(input any) (string, error) {
 	checkInitialization()
 	action := newInternalAction(actionCreate, reflect.TypeOf(input), input)
 	channel <- action
@@ -141,7 +143,7 @@ func Exists[inputType any](key string) bool {
 }
 
 // ExistsBy gets one element from a specific type filtering by other attribute. Returns true if found and false if parameters are incorrect or the element is not found
-func ExistsBy[inputType any](attribute string, input interface{}) bool {
+func ExistsBy[inputType any](attribute string, input any) bool {
 	checkInitialization()
 	action := newInternalAction(actionExistsBy, reflect.TypeFor[*inputType](), attribute, input)
 	channel <- action
@@ -157,7 +159,7 @@ func NextID[inputType any]() string {
 }
 
 // Upsert updates or inserts the entry. Returns the key of the modified object or an error
-func Upsert(input interface{}) (string, error) {
+func Upsert(input any) (string, error) {
 	checkInitialization()
 	action := newInternalAction(actionUpsert, reflect.TypeOf(input), input)
 	channel <- action

@@ -18,6 +18,7 @@ var /*const*/ stmtsMysql = map[int]string{
 var /*const*/ msgsMysql = map[int]*regexp.Regexp{
 	msgErrorNoSuchTable:       regexp.MustCompile(`Table '[^']+' doesn't exist`),
 	msgErrorNoRowsInResultSet: regexp.MustCompile(`sql: no rows in result set`),
+	msgErrorConnectionRefused: regexp.MustCompile(`connection refused`),
 }
 
 // Connect should be the first method called to initialize the db connection

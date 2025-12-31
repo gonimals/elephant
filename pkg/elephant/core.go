@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	data         map[reflect.Type](map[string]interface{})
+	data         map[reflect.Type](map[string]any)
 	learntTypes  map[reflect.Type]*util.LearntType
 	channel      chan *internalAction
 	waitgroup    sync.WaitGroup

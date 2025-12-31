@@ -14,6 +14,7 @@ func TestMysql(t *testing.T) {
 	db, err := ConnectMySQL(mysqlTestDB)
 	if err != nil {
 		t.Error("failed to create a valid db")
+		return
 	}
 	defer db.Close()
 	testDriver(t, db)

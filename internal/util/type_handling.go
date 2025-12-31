@@ -62,7 +62,7 @@ func ExamineType(input reflect.Type) (output *LearntType, err error) {
 }
 
 // Returns the key from the input ptr object
-func GetKey(input interface{}) (output string, err error) {
+func GetKey(input any) (output string, err error) {
 	typeDescriptor, err := ExamineType(reflect.TypeOf(input))
 	if err != nil {
 		return "", err
@@ -74,7 +74,7 @@ func GetKey(input interface{}) (output string, err error) {
 	return
 }
 
-func SetKey(inputType reflect.Type, input interface{}, key string) {
+func SetKey(inputType reflect.Type, input any, key string) {
 	typeDescriptor, err := ExamineType(inputType)
 	if err != nil {
 		panic(err)

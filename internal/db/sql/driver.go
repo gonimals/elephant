@@ -24,8 +24,6 @@ var /* const */ alphanumericRegexp *regexp.Regexp = regexp.MustCompile("^[A-Za-z
 // Name for the table to store byte blobs
 const BlobsTableName = "blobs"
 
-const errorPossibleSQLi = " could be a SQL injection attack"
-
 // These are the statement names
 const (
 	stmtCheckTable = iota
@@ -41,6 +39,7 @@ const (
 const (
 	msgErrorNoSuchTable = iota
 	msgErrorNoRowsInResultSet
+	msgErrorConnectionRefused
 )
 
 // This struct stores data needed to work with a struct in this DB
@@ -63,13 +62,16 @@ func connect(driverID string, dataSourceName string, baseStmts map[int]string, d
 	output = new(driver)
 	output.db, err = sql.Open(driverID, dataSourceName)
 	if err != nil {
-		log.Fatalln(err.Error())
+		return nil, err
 	}
 	output.baseStmts = baseStmts
 	output.driverMsgs = driverMsgs
 	output.checkedTypes = make(map[string]*typeHandler)
-	output.ensureBlobsTableIsHandled()
 	output.contextSymbol = contextSymbol
+	err = output.ensureBlobsTableIsHandled()
+	if err != nil {
+		return nil, err
+	}
 	return
 }
 
@@ -78,29 +80,31 @@ func (d *driver) Close() {
 }
 
 // ensureBlobsTableIsHandled checks if the blobs table exists and creates it if not
-func (d *driver) ensureBlobsTableIsHandled() {
+func (d *driver) ensureBlobsTableIsHandled() error {
 	//Start the handling tasks
 	var testID string
 	err := d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], BlobsTableName)).Scan(&testID)
 	if err == nil || d.driverMsgs[msgErrorNoRowsInResultSet].MatchString(err.Error()) {
 		// Table exists and can be empty
+	} else if d.driverMsgs[msgErrorConnectionRefused].MatchString(err.Error()) {
+		return fmt.Errorf("cannot connect to database: %v", err)
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
 		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateBlobs], BlobsTableName, MaxKeyLength))
 		if err != nil {
-			log.Fatalln("Can't create blobs table", err)
+			return fmt.Errorf("cannot create blobs table: %v", err)
 		}
 	} else {
-		log.Println("Unhandled error")
-		panic(err)
+		return fmt.Errorf("unhandled error: %v", err)
 	}
 	d.blobStmts = make(map[int]*sql.Stmt)
 	for i := stmtRetrieve; i <= stmtUpdate; i++ {
 		d.blobStmts[i], err = d.db.Prepare(fmt.Sprintf(d.baseStmts[i], BlobsTableName))
 		if err != nil {
-			log.Fatalln("Cannot initialize blobs statements", err.Error())
+			return fmt.Errorf("cannot initialize blobs statements: %v", err)
 		}
 	}
+	return nil
 }
 
 // createTypeHandler just populates the struct with the required SQL statements
@@ -123,7 +127,7 @@ func (d *driver) createTypeHandler(input string) (th *typeHandler, err error) {
 }
 
 // ensureTableIsHandled checks if the table is already handled by the driver and handles it if not, checking for SQLi at source code
-func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
+func (d *driver) ensureTableIsHandled(input string) (th *typeHandler, err error) {
 	th = d.checkedTypes[input]
 	if th != nil {
 		return //input is already handled
@@ -132,31 +136,34 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler) {
 	//Start the handling tasks
 	var testID string
 	if !alphanumericRegexp.MatchString(strings.ReplaceAll(input, d.contextSymbol, "")) {
-		log.Fatal(input + errorPossibleSQLi)
+		return nil, fmt.Errorf("possible SQL injection: %s", input)
 	}
-	err := d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], input)).Scan(&testID)
+	err = d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], input)).Scan(&testID)
 	if err == nil || d.driverMsgs[msgErrorNoRowsInResultSet].MatchString(err.Error()) {
 		// Table exists and can be empty
+		err = nil
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
 		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateTable], input, MaxKeyLength))
 		if err != nil {
-			log.Fatalln("Can't create table for "+input, err)
+			return nil, fmt.Errorf("cannot create table for %s: %v", input, err)
 		}
 	} else {
-		log.Printf("Unhandled error with query: %s", fmt.Sprintf(d.baseStmts[stmtCheckTable], input))
-		panic(err)
+		return nil, fmt.Errorf("unhandled error with query \"%s\": %v", fmt.Sprintf(d.baseStmts[stmtCheckTable], input), err)
 	}
 	th, err = d.createTypeHandler(input)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, fmt.Errorf("cannot create type handler for %s: %v", input, err)
 	}
 	d.checkedTypes[input] = th
 	return
 }
 
 func (d *driver) Retrieve(inputType string, key string) (output string, err error) {
-	handledType := d.ensureTableIsHandled(inputType)
+	handledType, err := d.ensureTableIsHandled(inputType)
+	if err != nil {
+		return
+	}
 	err = handledType.stmts[stmtRetrieve].QueryRow(key).Scan(&output)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
@@ -165,7 +172,10 @@ func (d *driver) Retrieve(inputType string, key string) (output string, err erro
 }
 
 func (d *driver) RetrieveAll(inputType string) (output map[string]string, err error) {
-	handledType := d.ensureTableIsHandled(inputType)
+	handledType, err := d.ensureTableIsHandled(inputType)
+	if err != nil {
+		return
+	}
 	rows, err := handledType.stmts[stmtRetrieveAll].Query()
 	if err != nil {
 		return
@@ -184,13 +194,19 @@ func (d *driver) RetrieveAll(inputType string) (output map[string]string, err er
 }
 
 func (d *driver) Remove(inputType string, key string) (err error) {
-	handledType := d.ensureTableIsHandled(inputType)
+	handledType, err := d.ensureTableIsHandled(inputType)
+	if err != nil {
+		return
+	}
 	_, err = handledType.stmts[stmtDelete].Exec(key)
 	return
 }
 
 func (d *driver) Create(inputType string, key string, input string) (err error) {
-	handledType := d.ensureTableIsHandled(inputType)
+	handledType, err := d.ensureTableIsHandled(inputType)
+	if err != nil {
+		return
+	}
 	if len(key) > MaxKeyLength {
 		return fmt.Errorf("sql: key too long (%d > %d)", len(key), MaxKeyLength)
 	}
@@ -199,7 +215,10 @@ func (d *driver) Create(inputType string, key string, input string) (err error) 
 }
 
 func (d *driver) Update(inputType string, key string, input string) (err error) {
-	handledType := d.ensureTableIsHandled(inputType)
+	handledType, err := d.ensureTableIsHandled(inputType)
+	if err != nil {
+		return
+	}
 	_, err = handledType.stmts[stmtUpdate].Exec(input, key)
 	return
 }

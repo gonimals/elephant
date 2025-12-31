@@ -73,8 +73,8 @@ func testReuseDB(uri string, t *testing.T) {
 	if err := Initialize(uri); err != nil {
 		t.Error("Renitialization failed", err)
 	}
-	retrievedStruct := RetrieveBy[structCheck]("Mybool", structCheckInstance.Mybool)
-	if retrievedStruct.Myint != structCheckInstance.Myint {
+	retrievedStruct, err := RetrieveBy[structCheck]("Mybool", structCheckInstance.Mybool)
+	if err != nil || retrievedStruct.Myint != structCheckInstance.Myint {
 		t.Error("Retrieved instance's Myint and the original one should be equal")
 	}
 	Close()
@@ -117,19 +117,21 @@ func testCorrectFunctions(uri string, t *testing.T) {
 	if _, err := Create(new(failingStructCheck)); err == nil {
 		t.Error("Creation of incorrect struct should fail")
 	}
-	if !util.CompareInstances(Retrieve[structCheck](structCheckInstance.Mystring), structCheckInstance) {
+	if comparison, err := util.CompareInstances(Retrieve[structCheck](structCheckInstance.Mystring), structCheckInstance); err != nil || !comparison {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
-	if !util.CompareInstances(RetrieveBy[structCheck]("Myint", structCheckInstance.Myint), structCheckInstance) {
+	if retrieved, err := RetrieveBy[structCheck]("Myint", structCheckInstance.Myint); err != nil {
+		t.Error("RetrieveBy produced an error")
+	} else if comparison, err := util.CompareInstances(retrieved, structCheckInstance); err != nil || !comparison {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
 	if Retrieve[structCheck]("unexistent") != nil {
 		t.Error("Retrieved instance should be nil")
 	}
-	if RetrieveBy[structCheck]("unexistent", nil) != nil {
-		t.Error("Retrieved instance should be nil")
+	if retrieved, err := RetrieveBy[structCheck]("unexistent", nil); err == nil || retrieved != nil {
+		t.Error("An error should have been produced")
 	}
-	if RetrieveBy[structCheck]("Myint", 456) != nil {
+	if retrieved, err := RetrieveBy[structCheck]("Myint", 456); err != nil || retrieved != nil {
 		t.Error("Retrieved instance should be nil")
 	}
 	if Update(updateTest) != nil {
