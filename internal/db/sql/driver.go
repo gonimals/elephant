@@ -8,8 +8,9 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql" //Add support for mysql db
-	_ "github.com/mattn/go-sqlite3"    //Add support for sqlite3 db
+	_ "github.com/go-sql-driver/mysql"       //Add support for mysql db
+	_ "github.com/ncruces/go-sqlite3/driver" //Add support for sqlite3 db
+	_ "github.com/ncruces/go-sqlite3/embed"  //Do not rely on external sqlite3 libraries
 )
 
 // MaxKeyLength sets the maximum string length for table keys
