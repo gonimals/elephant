@@ -1,5 +1,7 @@
 _Elephants never forget_
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/gonimals/elephant.svg)](https://pkg.go.dev/github.com/gonimals/elephant)
+
 # Schema
 The Elephant library will work only with structures which meet the following criteria:
 
@@ -18,7 +20,7 @@ Supported URIs, right now, follow this criteria:
 # Compiling and testing
 ```
 go get -u ./...
-go test -cover
+go test -cover ./...
 go mod tidy
 
 sqlite3 /tmp/foo.db
