@@ -41,7 +41,7 @@ export TZ=UTC0
 TIMESTAMP=$(git log -1 --date=format-local:%Y%m%d%H%M%S --pretty=format:"%cd")
 HASH=$(git rev-parse --short=12 HEAD)
 export GOPROXY=https://proxy.golang.org
-go list -m "github.com/username/repo@v0.0.0-$TIMESTAMP-$HASH"
+go list -m "github.com/gonimals/elephant@v0.0.0-$TIMESTAMP-$HASH"
 
 exit
 ```
