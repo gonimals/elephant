@@ -2,19 +2,22 @@ package elephant
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
 	"reflect"
-	"strconv"
 
 	"github.com/gonimals/elephant/internal/util"
+	"github.com/google/uuid"
 )
 
 type internalAction struct {
 	code      int
 	inputType reflect.Type
 	object    []any
-	output    chan any
+	output    chan actionOutput
+}
+
+type actionOutput struct {
+	data any
+	err  error
 }
 
 // internalAction codes
@@ -25,7 +28,7 @@ const (
 	actionUpdate
 	actionUpsert
 	actionRemove
-	actionRemoveByKey
+	actionRemoveById
 	actionCreate
 	actionExists
 	actionExistsBy
@@ -34,9 +37,67 @@ const (
 	actionBlobCreate
 	actionBlobRemove
 	actionBlobUpdate
+	actionBlobUpsert
+	actionBlobExists
 )
 
 var /*const*/ blobReflectType = reflect.TypeOf(&[]byte{})
+
+func mainRoutine() {
+	for {
+		action := <-channel
+		if action == nil {
+			//Received nil action. Shutting down mainRoutine
+			break
+		}
+		err := execManageType(action.inputType)
+		if err != nil {
+			action.output <- actionOutput{nil, err}
+			continue
+		}
+		output := actionOutput{}
+		switch action.code {
+		case actionRetrieve:
+			output.data, output.err = execRetrieve(action.inputType, action.object[0].(string))
+		case actionRetrieveAll:
+			output.data = execRetrieveAll(action.inputType)
+		case actionRetrieveBy:
+			output.data, output.err = execRetrieveBy(action.inputType, action.object[0].(string), action.object[1])
+		case actionRemove:
+			output.err = execRemove(action.inputType, action.object[0])
+		case actionRemoveById:
+			output.err = execRemoveById(action.inputType, action.object[0].(string))
+		case actionCreate:
+			output.data, output.err = execUpsert(action.inputType, action.object[0], false, true)
+		case actionUpdate:
+			output.data, output.err = execUpsert(action.inputType, action.object[0], true, false)
+		case actionUpsert:
+			output.data, output.err = execUpsert(action.inputType, action.object[0], true, true)
+		case actionExists:
+			output.data = execExists(action.inputType, action.object[0].(string))
+		case actionExistsBy:
+			output.data, output.err = execExistsBy(action.inputType, action.object[0].(string), action.object[1])
+		case actionNextID:
+			output.data, output.err = execNewID(action.inputType)
+		case actionBlobRetrieve:
+			output.data, output.err = execBlobRetrieve(action.object[0].(string))
+		case actionBlobCreate:
+			output.err = execBlobUpsert(action.object[0].(string), action.object[1].(*[]byte), false, true)
+		case actionBlobRemove:
+			output.err = execBlobRemove(action.object[0].(string))
+		case actionBlobUpdate:
+			output.err = execBlobUpsert(action.object[0].(string), action.object[1].(*[]byte), true, false)
+		case actionBlobUpsert:
+			output.err = execBlobUpsert(action.object[0].(string), action.object[1].(*[]byte), true, true)
+		case actionBlobExists:
+			output.data, output.err = dbDriver.BlobExists(action.object[0].(string))
+		default:
+			output.err = util.Errorf("unknown action")
+		}
+		action.output <- output
+	}
+	waitgroup.Done()
+}
 
 func execManageType(inputType reflect.Type) error {
 	if managedTypes[inputType] {
@@ -52,271 +113,181 @@ func execManageType(inputType reflect.Type) error {
 
 	retrieved, err := dbDriver.RetrieveAll(getTableName(inputType))
 	if err != nil {
-		return fmt.Errorf("error reading data from database: %v", err)
+		return util.Errorf("error reading data from database: %v", err)
 	}
 	data[inputType] = make(map[string]any)
 	var loadErrors []error
-	for key, value := range retrieved {
+	for id, value := range retrieved {
 		valueObject, err := util.LoadObjectFromJson(inputType, []byte(value))
 		if err != nil {
 			loadErrors = append(loadErrors, err)
 			continue
 		}
-		data[inputType][key] = valueObject
+		data[inputType][id] = valueObject
 	}
 	if len(loadErrors) > 0 {
-		return fmt.Errorf("error loading data from database: %v", loadErrors)
+		return util.Errorf("error loading data from database: %v", loadErrors)
 	}
 	return nil
 }
 
-func execRetrieve(inputType reflect.Type, key string) (output any) {
-	if object, exists := data[inputType][key]; exists {
+func execRetrieve(inputType reflect.Type, id string) (output any, err error) {
+	if object, exists := data[inputType][id]; exists {
 		output, err := util.CopyEntireObject(object)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return output
+		return output, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func execRetrieveBy(inputType reflect.Type, attribute string, object any) (output any) {
+func execRetrieveBy(inputType reflect.Type, attribute string, object any) (output any, err error) {
 	//TODO: Yes, this is not the best way to search
 	lt := learntTypes[inputType]
 	filterType := lt.Fields[attribute]
 	if filterType == nil || reflect.TypeOf(object) != filterType {
 		//log.Println("RetrieveBy executed with invalid arguments:", filterType, reflect.TypeOf(object))
-		return fmt.Errorf("cannot retrieve by attribute named %s with type %v: filter type is %v", attribute, reflect.TypeOf(object), filterType)
+		return nil, util.Errorf("cannot retrieve by attribute named %s with type %v: filter type is %v", attribute, reflect.TypeOf(object), filterType)
 	}
 	for _, elem := range data[inputType] {
 		if object == reflect.ValueOf(elem).Elem().FieldByName(attribute).Interface() {
 			output, err := util.CopyEntireObject(elem)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			return output
+			return output, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func execRetrieveAll(inputType reflect.Type) (output any) {
 	return data[inputType]
 }
 
-func execBlobRetrieve(key string) (output any) {
-	blob, _ := dbDriver.BlobRetrieve(key)
-	// The error is ignored, as it will probably be norows
-	return blob
+func execBlobRetrieve(id string) (any, error) {
+	blob, _ := dbDriver.BlobRetrieve(id)
+	// TODO: The error is ignored, as it will probably be norows
+	return blob, nil
 }
 
 func execRemove(inputType reflect.Type, input any) error {
-	key, err := util.GetKey(input)
+	id, err := util.GetId(input)
 	if err != nil {
-		return fmt.Errorf("elephant: cannot get id from element")
+		return util.Errorf("cannot get id from element")
 	}
-	return execRemoveByKey(inputType, key)
+	return execRemoveById(inputType, id)
 }
 
-func execRemoveByKey(inputType reflect.Type, key string) (err error) {
-	if !execExists(inputType, key) {
-		return fmt.Errorf("elephant: there is not element with such id")
+func execRemoveById(inputType reflect.Type, id string) (err error) {
+	if !execExists(inputType, id) {
+		return util.Errorf("there is not element with such id")
 	}
-	err = dbDriver.Remove(getTableName(inputType), key)
+	err = dbDriver.Remove(getTableName(inputType), id)
 	if err == nil {
-		delete(data[inputType], key)
+		delete(data[inputType], id)
 	}
 	return
 }
 
-func execBlobRemove(key string) (err error) {
-	return dbDriver.BlobRemove(key)
+func execBlobRemove(id string) (err error) {
+	return dbDriver.BlobRemove(id)
 }
 
-func execCreate(inputType reflect.Type, object any) (output any) {
-	key, err := util.GetKey(object)
+func execUpsert(inputType reflect.Type, object any, allowUpdate bool, allowCreate bool) (output any, err error) {
+	if !allowUpdate && !allowCreate {
+		return nil, util.Errorf("execUpsert internal error: no valid modes")
+	}
+	id, err := util.GetId(object)
 	if err != nil {
-		return err
-	} else if key == "" {
-		key = execNextID(inputType)
-		util.SetKey(inputType, object, key)
-	} else if data[inputType][key] != nil {
-		return fmt.Errorf("elephant: trying to create an object with id in use")
-	}
-	data[inputType][key], err = util.CopyEntireObject(object)
-	if err != nil {
-		return err
-	}
-	objectString, err := json.Marshal(object)
-	if err != nil {
-		log.Fatalln("elephant: can't convert object to json:", object)
-	}
-	if len(objectString) > util.MaxStructLength {
-		return fmt.Errorf("elephant: serialized object too long to be stored")
-	}
-	err = dbDriver.Create(getTableName(inputType), key, string(objectString))
-	if err != nil {
-		delete(data[inputType], key)
-	}
-	return key
-}
-
-func execBlobCreate(key string, contents *[]byte) error {
-	if len(*contents) > util.MaxBlobsLength {
-		return fmt.Errorf("elephant: blob too big to be stored")
-	}
-	return dbDriver.BlobCreate(key, contents)
-}
-
-func execUpdate(inputType reflect.Type, object any) (err error) {
-	key, err := util.GetKey(object)
-	if err != nil {
-		return
-	}
-	oldObject, existingObject := data[inputType][key]
-	if !existingObject {
-		return fmt.Errorf("elephant: trying to update unexistent object")
-	}
-	objectString, err := json.Marshal(object)
-	if err != nil {
-		log.Fatalln("elephant: can't convert object to json:", object)
-	}
-	if len(objectString) > util.MaxStructLength {
-		return fmt.Errorf("elephant: serialized object too long to be stored")
-	}
-	err = dbDriver.Update(getTableName(inputType), key, string(objectString))
-	if err != nil {
-		data[inputType][key] = oldObject
-	} else {
-		data[inputType][key], err = util.CopyEntireObject(object)
-		if err != nil {
-			return err
-		}
-	}
-	return
-}
-
-func execBlobUpdate(key string, contents *[]byte) (err error) {
-	return dbDriver.BlobUpdate(key, contents)
-}
-
-func execUpsert(inputType reflect.Type, object any) (output any) {
-	key, err := util.GetKey(object)
-	if err != nil {
-		return err
+		return nil, err
 	}
 	var existingObject bool
 	var oldObject any
-	if key != "" {
-		oldObject, existingObject = data[inputType][key]
+	if id != "" {
+		oldObject, existingObject = data[inputType][id]
+		if existingObject && !allowUpdate {
+			return nil, util.Errorf("trying to create an object with id in use")
+		} else if !existingObject && !allowCreate {
+			return nil, util.Errorf("trying to update unexistent object")
+		}
 	} else {
-		key = execNextID(inputType)
-		util.SetKey(inputType, object, key)
+		if !allowCreate {
+			return nil, util.Errorf("trying to update object without id")
+		}
+		id, err = execNewID(inputType)
+		if err != nil {
+			return nil, err
+		}
+		util.SetId(inputType, object, id)
 	}
 	objectString, err := json.Marshal(object)
 	if err != nil {
-		log.Fatalln("elephant: can't convert object to json:", object)
+		return nil, util.Errorf("cannot convert object to json: %s error: %v", object, err)
 	}
 	if len(objectString) > util.MaxStructLength {
-		return fmt.Errorf("elephant: serialized object too long to be stored")
+		return nil, util.Errorf("serialized object too long to be stored")
 	}
-	data[inputType][key], err = util.CopyEntireObject(object)
+	data[inputType][id], err = util.CopyEntireObject(object)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if existingObject {
-		err = dbDriver.Update(getTableName(inputType), key, string(objectString))
+		err = dbDriver.Update(getTableName(inputType), id, string(objectString))
 		if err != nil {
-			data[inputType][key] = oldObject
-			return err
+			data[inputType][id] = oldObject
+			return nil, err
 		}
 	} else {
-		err = dbDriver.Create(getTableName(inputType), key, string(objectString))
+		err = dbDriver.Create(getTableName(inputType), id, string(objectString))
 		if err != nil {
-			delete(data[inputType], key)
-			return err
+			delete(data[inputType], id)
+			return nil, err
 		}
 	}
-	return key
+	return id, nil
 }
 
-func execExists(inputType reflect.Type, key string) (output bool) {
-	_, output = data[inputType][key]
+func execBlobUpsert(id string, contents *[]byte, allowUpdate bool, allowCreate bool) (err error) {
+	if len(*contents) > util.MaxBlobsLength {
+		return util.Errorf("blob too big to be stored")
+	}
+	blobExists, err := dbDriver.BlobExists(id)
+	if err != nil {
+		return util.Errorf("cannot determine if blob exists: %v", err)
+	}
+	if blobExists {
+		if !allowUpdate {
+			return util.Errorf("trying to create an existing blob")
+		}
+		return dbDriver.BlobUpdate(id, contents)
+	} else {
+		if !allowCreate {
+			return util.Errorf("trying to update an unexistent blob")
+		}
+		return dbDriver.BlobCreate(id, contents)
+	}
+}
+
+func execExists(inputType reflect.Type, id string) (output bool) {
+	_, output = data[inputType][id]
 	return
 }
 
 func execExistsBy(inputType reflect.Type, attribute string, object any) (bool, error) {
-	output := execRetrieveBy(inputType, attribute, object)
-	switch v := output.(type) {
-	case error:
-		return false, v
-	default:
-		return v != nil, nil
-	}
+	output, err := execRetrieveBy(inputType, attribute, object)
+	return output != nil, err
 }
 
-func execNextID(inputType reflect.Type) string {
-	//TODO: Yes, this is not the best way to search
-	var outputInt int
-	for outputInt = 0; data[inputType][strconv.Itoa(outputInt)] != nil; outputInt++ {
-	}
-	return strconv.Itoa(outputInt)
-}
-
-func mainRoutine() {
-	for {
-		action := <-channel
-		if action == nil {
-			//Received nil action. Shutting down mainRoutine
-			break
-		}
-		err := execManageType(action.inputType)
-		if err != nil {
-			action.output <- err
-			continue
-		}
-		switch action.code {
-		case actionRetrieve:
-			action.output <- execRetrieve(action.inputType, action.object[0].(string))
-		case actionRetrieveAll:
-			action.output <- execRetrieveAll(action.inputType)
-		case actionRetrieveBy:
-			action.output <- execRetrieveBy(action.inputType, action.object[0].(string), action.object[1])
-		case actionRemove:
-			action.output <- execRemove(action.inputType, action.object[0])
-		case actionRemoveByKey:
-			action.output <- execRemoveByKey(action.inputType, action.object[0].(string))
-		case actionCreate:
-			action.output <- execCreate(action.inputType, action.object[0])
-		case actionUpdate:
-			action.output <- execUpdate(action.inputType, action.object[0])
-		case actionUpsert:
-			action.output <- execUpsert(action.inputType, action.object[0])
-		case actionExists:
-			action.output <- execExists(action.inputType, action.object[0].(string))
-		case actionExistsBy:
-			output, err := execExistsBy(action.inputType, action.object[0].(string), action.object[1])
-			if err != nil {
-				action.output <- err
-			} else {
-				action.output <- output
-			}
-		case actionNextID:
-			action.output <- execNextID(action.inputType)
-		case actionBlobRetrieve:
-			action.output <- execBlobRetrieve(action.object[0].(string))
-		case actionBlobCreate:
-			action.output <- execBlobCreate(action.object[0].(string), action.object[1].(*[]byte))
-		case actionBlobRemove:
-			action.output <- execBlobRemove(action.object[0].(string))
-		case actionBlobUpdate:
-			action.output <- execBlobUpdate(action.object[0].(string), action.object[1].(*[]byte))
-		default:
-			action.output <- nil
+func execNewID(inputType reflect.Type) (string, error) {
+	for i := 0; i < 100; i++ {
+		id := uuid.New().String()
+		if !execExists(inputType, id) {
+			return id, nil
 		}
 	}
-	waitgroup.Done()
+	return "", util.Errorf("cannot generate a unique UUID after 100 attempts")
 }
 
 func newInternalAction(code int, inputType reflect.Type, object ...any) *internalAction {
@@ -324,7 +295,7 @@ func newInternalAction(code int, inputType reflect.Type, object ...any) *interna
 		code:      code,
 		inputType: inputType,
 		object:    object,
-		output:    make(chan any)}
+		output:    make(chan actionOutput, 1)}
 }
 
 func getTableName(inputType reflect.Type) (output string) {

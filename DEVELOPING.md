@@ -12,7 +12,7 @@ select * from structCheck;
 ## MySQL
 To perform MySQL tests, create a docker container with the following configuration:
 ```bash
-docker run -d -p33060:3306 --name elephant-testing \
+docker run -d --rm -p33060:3306 --name elephant-testing \
 -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=true \
 -e MARIADB_DATABASE=elephant \
 mariadb:lts

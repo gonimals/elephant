@@ -5,7 +5,7 @@ _Elephants never forget_
 # Schema
 The Elephant library will work only with structures which meet the following criteria:
 
-- It has a parameter of type string which has the tag `db:"key"` and is unique (will be used as primary key)
+- It has a parameter of type string which has the tag `db:"id"` and is unique (will be used as primary key)
 - The structure can be marshalled to JSON
 - The struct name meets the following regular expression: `[0-9A-Za-z_]{1,40}`
 - All attributes to be saved must be public (first letter of the variable name must be uppercase)
@@ -24,4 +24,15 @@ if err != nil {
     log.Fatalln("Initialization failed:", err)
 }
 defer elephant.Close()
+
+element := struct{
+    id string `db:"id"`
+    dataInt int
+    dataString string
+} {
+    dataInt: 4,
+    dataString: "test",
+}
+
+elephant.Store(element)
 ```

@@ -8,13 +8,14 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql"       //Add support for mysql db
+	_ "github.com/go-sql-driver/mysql" //Add support for mysql db
+	"github.com/gonimals/elephant/internal/util"
 	_ "github.com/ncruces/go-sqlite3/driver" //Add support for sqlite3 db
 	_ "github.com/ncruces/go-sqlite3/embed"  //Do not rely on external sqlite3 libraries
 )
 
-// MaxKeyLength sets the maximum string length for table keys
-const MaxKeyLength = 512
+// MaxIdLength sets the maximum string length for table ids
+const MaxIdLength = 512
 
 // maxRegexLength decides the maximum length for any string checked with alphanumericRegexp
 const maxRegexLength = "40"
@@ -27,8 +28,10 @@ const BlobsTableName = "blobs"
 
 // These are the statement names
 const (
-	stmtCheckTable = iota
+	stmtDropTable = iota
+	stmtCheckTable
 	stmtCreateTable
+	stmtExists
 	stmtRetrieve
 	stmtRetrieveAll
 	stmtInsert
@@ -88,21 +91,21 @@ func (d *driver) ensureBlobsTableIsHandled() error {
 	if err == nil || d.driverMsgs[msgErrorNoRowsInResultSet].MatchString(err.Error()) {
 		// Table exists and can be empty
 	} else if d.driverMsgs[msgErrorConnectionRefused].MatchString(err.Error()) {
-		return fmt.Errorf("cannot connect to database: %v", err)
+		return util.Errorf("cannot connect to database: %v", err)
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
-		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateBlobs], BlobsTableName, MaxKeyLength))
+		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateBlobs], BlobsTableName, MaxIdLength))
 		if err != nil {
-			return fmt.Errorf("cannot create blobs table: %v", err)
+			return util.Errorf("cannot create blobs table: %v", err)
 		}
 	} else {
-		return fmt.Errorf("unhandled error: %v", err)
+		return util.Errorf("unhandled error: %v", err)
 	}
 	d.blobStmts = make(map[int]*sql.Stmt)
-	for i := stmtRetrieve; i <= stmtUpdate; i++ {
+	for i := stmtExists; i <= stmtUpdate; i++ {
 		d.blobStmts[i], err = d.db.Prepare(fmt.Sprintf(d.baseStmts[i], BlobsTableName))
 		if err != nil {
-			return fmt.Errorf("cannot initialize blobs statements: %v", err)
+			return util.Errorf("cannot initialize blobs statements: %v", err)
 		}
 	}
 	return nil
@@ -137,7 +140,7 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler, err error)
 	//Start the handling tasks
 	var testID string
 	if !alphanumericRegexp.MatchString(strings.ReplaceAll(input, d.contextSymbol, "")) {
-		return nil, fmt.Errorf("possible SQL injection: %s", input)
+		return nil, util.Errorf("possible SQL injection: %s", input)
 	}
 	err = d.db.QueryRow(fmt.Sprintf(d.baseStmts[stmtCheckTable], input)).Scan(&testID)
 	if err == nil || d.driverMsgs[msgErrorNoRowsInResultSet].MatchString(err.Error()) {
@@ -145,27 +148,27 @@ func (d *driver) ensureTableIsHandled(input string) (th *typeHandler, err error)
 		err = nil
 	} else if d.driverMsgs[msgErrorNoSuchTable].MatchString(err.Error()) {
 		// Table does not exist. Let's create it
-		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateTable], input, MaxKeyLength))
+		_, err := d.db.Exec(fmt.Sprintf(d.baseStmts[stmtCreateTable], input, MaxIdLength))
 		if err != nil {
-			return nil, fmt.Errorf("cannot create table for %s: %v", input, err)
+			return nil, util.Errorf("cannot create table for %s: %v", input, err)
 		}
 	} else {
-		return nil, fmt.Errorf("unhandled error with query \"%s\": %v", fmt.Sprintf(d.baseStmts[stmtCheckTable], input), err)
+		return nil, util.Errorf("unhandled error with query \"%s\": %v", fmt.Sprintf(d.baseStmts[stmtCheckTable], input), err)
 	}
 	th, err = d.createTypeHandler(input)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create type handler for %s: %v", input, err)
+		return nil, util.Errorf("cannot create type handler for %s: %v", input, err)
 	}
 	d.checkedTypes[input] = th
 	return
 }
 
-func (d *driver) Retrieve(inputType string, key string) (output string, err error) {
+func (d *driver) Retrieve(inputType string, id string) (output string, err error) {
 	handledType, err := d.ensureTableIsHandled(inputType)
 	if err != nil {
 		return
 	}
-	err = handledType.stmts[stmtRetrieve].QueryRow(key).Scan(&output)
+	err = handledType.stmts[stmtRetrieve].QueryRow(id).Scan(&output)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 	}
@@ -194,49 +197,49 @@ func (d *driver) RetrieveAll(inputType string) (output map[string]string, err er
 	return
 }
 
-func (d *driver) Remove(inputType string, key string) (err error) {
+func (d *driver) Remove(inputType string, id string) (err error) {
 	handledType, err := d.ensureTableIsHandled(inputType)
 	if err != nil {
 		return
 	}
-	_, err = handledType.stmts[stmtDelete].Exec(key)
+	_, err = handledType.stmts[stmtDelete].Exec(id)
 	return
 }
 
-func (d *driver) Create(inputType string, key string, input string) (err error) {
+func (d *driver) Create(inputType string, id string, input string) (err error) {
 	handledType, err := d.ensureTableIsHandled(inputType)
 	if err != nil {
 		return
 	}
-	if len(key) > MaxKeyLength {
-		return fmt.Errorf("sql: key too long (%d > %d)", len(key), MaxKeyLength)
+	if len(id) > MaxIdLength {
+		return util.Errorf("sql: id too long (%d > %d)", len(id), MaxIdLength)
 	}
-	_, err = handledType.stmts[stmtInsert].Exec(key, input)
+	_, err = handledType.stmts[stmtInsert].Exec(id, input)
 	return
 }
 
-func (d *driver) Update(inputType string, key string, input string) (err error) {
+func (d *driver) Update(inputType string, id string, input string) (err error) {
 	handledType, err := d.ensureTableIsHandled(inputType)
 	if err != nil {
 		return
 	}
-	_, err = handledType.stmts[stmtUpdate].Exec(input, key)
+	_, err = handledType.stmts[stmtUpdate].Exec(input, id)
 	return
 }
 
-func (d *driver) BlobRetrieve(key string) (output *[]byte, err error) {
-	err = d.blobStmts[stmtRetrieve].QueryRow(key).Scan(&output)
+func (d *driver) BlobRetrieve(id string) (output *[]byte, err error) {
+	err = d.blobStmts[stmtRetrieve].QueryRow(id).Scan(&output)
 	return
 }
-func (d *driver) BlobCreate(key string, input *[]byte) (err error) {
-	if len(key) > MaxKeyLength {
-		return fmt.Errorf("sql: key too long (%d > %d)", len(key), MaxKeyLength)
+func (d *driver) BlobCreate(id string, input *[]byte) (err error) {
+	if len(id) > MaxIdLength {
+		return util.Errorf("sql: id too long (%d > %d)", len(id), MaxIdLength)
 	}
-	_, err = d.blobStmts[stmtInsert].Exec(key, input)
+	_, err = d.blobStmts[stmtInsert].Exec(id, input)
 	return
 }
-func (d *driver) BlobUpdate(key string, input *[]byte) (err error) {
-	result, err := d.blobStmts[stmtUpdate].Exec(input, key)
+func (d *driver) BlobUpdate(id string, input *[]byte) (err error) {
+	result, err := d.blobStmts[stmtUpdate].Exec(input, id)
 	if err != nil {
 		return
 	}
@@ -245,12 +248,12 @@ func (d *driver) BlobUpdate(key string, input *[]byte) (err error) {
 		return
 	}
 	if affectedRows != 1 {
-		return fmt.Errorf("sql: blob update modified %d rows", affectedRows)
+		return util.Errorf("sql: blob update modified %d rows", affectedRows)
 	}
 	return
 }
-func (d *driver) BlobRemove(key string) (err error) {
-	result, err := d.blobStmts[stmtDelete].Exec(key)
+func (d *driver) BlobRemove(id string) (err error) {
+	result, err := d.blobStmts[stmtDelete].Exec(id)
 	if err != nil {
 		return
 	}
@@ -259,9 +262,19 @@ func (d *driver) BlobRemove(key string) (err error) {
 		return
 	}
 	if affectedRows != 1 {
-		return fmt.Errorf("sql: blob delete modified %d rows", affectedRows)
+		return util.Errorf("sql: blob delete modified %d rows", affectedRows)
 	}
 	return
+}
+func (d *driver) BlobExists(id string) (output bool, err error) {
+	var outputID string
+	err = d.blobStmts[stmtExists].QueryRow(id).Scan(&outputID)
+	if err == nil {
+		return true, nil
+	} else if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
 }
 func (d *driver) GetContextSymbol() string {
 	return d.contextSymbol

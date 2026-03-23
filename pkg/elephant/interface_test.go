@@ -66,7 +66,7 @@ func testReuseDB(uri string, t *testing.T) {
 		Mybool:   false}
 
 	if _, err := Create(structCheckInstance); err != nil {
-		t.Error("Creation failed")
+		t.Error("Creation failed:", err)
 	}
 	Close()
 
@@ -112,12 +112,17 @@ func testCorrectFunctions(uri string, t *testing.T) {
 		t.Error("Creation of non pointer struct should fail")
 	}
 	if _, err := Create(structCheckInstance); err != nil {
-		t.Error("Creation failed")
+		t.Error("Creation failed:", err)
+		return
 	}
 	if _, err := Create(new(failingStructCheck)); err == nil {
 		t.Error("Creation of incorrect struct should fail")
 	}
-	if comparison, err := util.CompareInstances(Retrieve[structCheck](structCheckInstance.Mystring), structCheckInstance); err != nil || !comparison {
+	retrieved, err := Retrieve[structCheck](structCheckInstance.Mystring)
+	if err != nil {
+		t.Error("Retrieve operation failed")
+	}
+	if comparison, err := util.CompareInstances(retrieved, structCheckInstance); err != nil || !comparison {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
 	if retrieved, err := RetrieveBy[structCheck]("Myint", structCheckInstance.Myint); err != nil {
@@ -125,8 +130,8 @@ func testCorrectFunctions(uri string, t *testing.T) {
 	} else if comparison, err := util.CompareInstances(retrieved, structCheckInstance); err != nil || !comparison {
 		t.Error("Retrieved instance and the original one should be equal")
 	}
-	if Retrieve[structCheck]("unexistent") != nil {
-		t.Error("Retrieved instance should be nil")
+	if retrieved, err := Retrieve[structCheck]("unexistent"); retrieved != nil || err != nil {
+		t.Error("Retrieved instance and error should be nil:", retrieved, err)
 	}
 	if retrieved, err := RetrieveBy[structCheck]("unexistent", nil); err == nil || retrieved != nil {
 		t.Error("An error should have been produced")
@@ -142,29 +147,30 @@ func testCorrectFunctions(uri string, t *testing.T) {
 		t.Error("Update of unexistent element should not be nil")
 	}
 
-	if err := RemoveByKey[structCheck]("1000"); err == nil {
+	if err := RemoveById[structCheck]("1000"); err == nil {
 		t.Error("Fake deletion didn't give any error")
 	}
 
 	if allInstances, _ := RetrieveAll[structCheck](); len(allInstances) != 3 {
 		t.Error("Entire instances count differs after fake deletion")
 	}
-	if NextID[structCheck]() != "2" {
-		t.Error("NextID is not giving the first empty ID:", NextID[structCheck]())
+	newID, err := NewID[structCheck]()
+	if err != nil {
+		t.Error("NewID is throwing an error:", err)
 	}
-	if Exists[structCheck]("2") {
-		t.Error("Exists returning true on non-existent entry")
+	if exists, err := Exists[structCheck](newID); exists || err != nil {
+		t.Error("Exists returning true or an error on non-existent entry")
 	}
-	if ExistsBy[structCheck]("Mystring", "unexistent") {
+	if exists, err := ExistsBy[structCheck]("Mystring", "unexistent"); exists || err != nil {
 		t.Errorf("Exists returning true on non-existent entry")
 	}
-	if err := RemoveByKey[structCheck](structCheckInstance.Mystring); err != nil {
+	if err := RemoveById[structCheck](structCheckInstance.Mystring); err != nil {
 		t.Error("Remove operation failed, when should be correct:", err)
 	}
 	if allInstances, _ := RetrieveAll[structCheck](); len(allInstances) != 2 {
-		t.Error("Entire instances count differs after deletion by key")
-		for key, value := range data[reflect.TypeFor[structCheck]()] {
-			log.Println(key, value)
+		t.Error("Entire instances count differs after deletion by id")
+		for id, value := range data[reflect.TypeFor[structCheck]()] {
+			log.Println(id, value)
 		}
 	}
 	updateTest.Mystring = "testingUpdate"
@@ -173,8 +179,8 @@ func testCorrectFunctions(uri string, t *testing.T) {
 	}
 	if allInstances, _ := RetrieveAll[structCheck](); len(allInstances) != 1 {
 		t.Error("Entire instances count differs after deletion")
-		for key, value := range data[reflect.TypeFor[structCheck]()] {
-			log.Println(key, value)
+		for id, value := range data[reflect.TypeFor[structCheck]()] {
+			log.Println(id, value)
 		}
 	}
 	if err := Remove(updateTest); err == nil {
@@ -188,16 +194,16 @@ func testUpdate(uri string, t *testing.T) {
 	}
 	defer Close()
 
-	if key, err := Create(&structCheck{
+	if id, err := Create(&structCheck{
 		Myint64:  0,
 		Mystring: "1",
 		Myint:    234,
-		Mybool:   true}); key != "1" || err != nil {
+		Mybool:   true}); id != "1" || err != nil {
 		t.Error("Creation failed")
 	}
 
-	workingInstance := Retrieve[structCheck]("1")
-	if workingInstance == nil {
+	workingInstance, err := Retrieve[structCheck]("1")
+	if workingInstance == nil || err != nil {
 		t.Error("Retrieve operation failed")
 		return //To avoid go-staticcheck SA5011
 	}
@@ -205,8 +211,8 @@ func testUpdate(uri string, t *testing.T) {
 	if err := Update(workingInstance); err == nil {
 		t.Error("Instance should be too long to be stored in the database")
 	}
-	workingInstance = Retrieve[structCheck]("1")
-	if workingInstance == nil {
+	workingInstance, err = Retrieve[structCheck]("1")
+	if workingInstance == nil || err != nil {
 		t.Error("Retrieve operation failed")
 		return //To avoid go-staticcheck SA5011
 	}
@@ -220,24 +226,26 @@ func testUpsert(uri string, t *testing.T) {
 	}
 	defer Close()
 
-	if key, err := Upsert(&structCheck{
+	var id1, id2 string
+	var err error
+	if id1, err = Upsert(&structCheck{
 		Myint64:  0,
 		Mystring: "",
 		Myint:    234,
-		Mybool:   true}); key != "0" || err != nil {
+		Mybool:   true}); id1 == "" || err != nil {
 		t.Error("Creation failed")
 	}
 
-	if key, err := Upsert(&structCheck{
+	if id2, err = Upsert(&structCheck{
 		Myint64:  2,
 		Mystring: "",
 		Myint:    345,
-		Mybool:   true}); key != "1" || err != nil {
+		Mybool:   true}); id2 == "" || err != nil {
 		t.Error("Creation failed")
 	}
 
-	workingInstance := Retrieve[structCheck]("0")
-	if workingInstance == nil {
+	workingInstance, err := Retrieve[structCheck](id1)
+	if workingInstance == nil || err != nil {
 		t.Error("Retrieve operation failed")
 		return //To avoid go-staticcheck SA5011
 	}
@@ -245,8 +253,8 @@ func testUpsert(uri string, t *testing.T) {
 	if _, err := Upsert(workingInstance); err == nil {
 		t.Error("Instance should be too long to be stored in the database")
 	}
-	workingInstance = Retrieve[structCheck]("0")
-	if workingInstance == nil {
+	workingInstance, err = Retrieve[structCheck](id1)
+	if workingInstance == nil || err != nil {
 		t.Error("Retrieve operation failed")
 		return //To avoid go-staticcheck SA5011
 	}
@@ -267,11 +275,14 @@ func testCorrectBlobs(uri string, t *testing.T) {
 	if err := BlobCreate("1", &[]byte{0x00}); err == nil {
 		t.Error("Creation repeated blob should fail")
 	}
-	if !util.BlobsEqual(BlobRetrieve("1"), &[]byte{0x00}) {
+	if retrieved, err := BlobRetrieve("1"); err != nil || !util.BlobsEqual(retrieved, &[]byte{0x00}) {
 		t.Error("Retrieved blob and the original one should be equal")
 	}
-	if BlobRetrieve("2") != nil {
+	if retrieved, err := BlobRetrieve("2"); retrieved != nil || err != nil {
 		t.Error("Retrieved blob should be nil")
+	}
+	if exists, err := BlobExists("1"); !exists || err != nil {
+		t.Error("")
 	}
 	if BlobUpdate("1", &[]byte{0x01}) != nil {
 		t.Error("Update without errors should be nil")

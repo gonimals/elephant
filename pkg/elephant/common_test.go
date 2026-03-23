@@ -10,7 +10,7 @@ const mysqlTestDB = "root:@tcp(127.0.0.1:33060)/elephant"
 const sqlite3TestDB = "/tmp/foo.db"
 
 type structCheck struct {
-	Mystring string `db:"key"`
+	Mystring string `db:"id"`
 	Myint    int
 	Myint64  int64
 	Mybool   bool
@@ -18,7 +18,7 @@ type structCheck struct {
 
 type failingStructCheck struct {
 	Mystring string
-	Myint    int `db:"key"`
+	Myint    int `db:"id"`
 	Myint64  int64
 	Mybool   bool
 }

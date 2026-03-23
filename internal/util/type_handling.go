@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -14,7 +13,7 @@ const MaxBlobsLength = 65535 //64k
 // Structs
 type LearntType struct {
 	Name    string
-	Key     string //only needed if struct will be a db table
+	Id      string //only needed if struct will be a db table
 	Fields  map[string]reflect.Type
 	Updates map[string]struct{}
 }
@@ -24,7 +23,7 @@ var LearntTypes = map[reflect.Type]*LearntType{}
 // examineType will check that the type can be transformed into JSON and has an Id parameter
 func ExamineType(input reflect.Type) (output *LearntType, err error) {
 	if input.Kind() != reflect.Ptr || input.Elem().Kind() != reflect.Struct {
-		return nil, fmt.Errorf("%s is not a pointer to struct. Kind: %s",
+		return nil, Errorf("%s is not a pointer to struct. Kind: %s",
 			input.String(), input.Kind().String())
 	}
 	input = input.Elem()
@@ -42,10 +41,10 @@ func ExamineType(input reflect.Type) (output *LearntType, err error) {
 		output.Fields[field.Name] = field.Type
 		if field.Tag != "" {
 			tag := field.Tag.Get("db")
-			if tag == "key" {
-				output.Key = field.Name
+			if tag == "id" {
+				output.Id = field.Name
 				if field.Type.Kind() != reflect.String {
-					return nil, fmt.Errorf("%s has a parameter with the annotation `db:\"key\"` which is not a string",
+					return nil, Errorf("%s has a parameter with the annotation `db:\"id\"` which is not a string",
 						input.String())
 				}
 			} else if tag == "update" {
@@ -53,31 +52,43 @@ func ExamineType(input reflect.Type) (output *LearntType, err error) {
 			}
 		}
 	}
-	if output.Key == "" {
-		return nil, fmt.Errorf("%s hasn't got an string parameter with the annotation `db:\"key\"`",
+	if output.Id == "" {
+		return nil, Errorf("%s hasn't got an string parameter with the annotation `db:\"id\"`",
 			input.String())
 	}
 	LearntTypes[input] = output
 	return
 }
 
-// Returns the key from the input ptr object
-func GetKey(input any) (output string, err error) {
+// Returns the id from the input ptr object
+func GetId(input any) (output string, err error) {
 	typeDescriptor, err := ExamineType(reflect.TypeOf(input))
 	if err != nil {
 		return "", err
 	}
 	if reflect.ValueOf(input).IsNil() {
-		return "", fmt.Errorf("no nil key creation allowed")
+		return "", Errorf("no nil id creation allowed")
 	}
-	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.Key).String()
+	output = reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.Id).String()
 	return
 }
 
-func SetKey(inputType reflect.Type, input any, key string) {
+func SetId(inputType reflect.Type, input any, id string) {
 	typeDescriptor, err := ExamineType(inputType)
 	if err != nil {
 		panic(err)
 	}
-	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.Key).SetString(key)
+	reflect.ValueOf(input).Elem().FieldByName(typeDescriptor.Id).SetString(id)
+}
+
+func IsNilable[T any]() bool {
+	t := reflect.TypeFor[T]()
+	k := t.Kind()
+
+	switch k {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return true
+	default:
+		return false
+	}
 }

@@ -1,7 +1,6 @@
 package elephant
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -9,7 +8,9 @@ import (
 	"github.com/gonimals/elephant/internal/util"
 )
 
-// Initialize requires a supported uri using one of the following supported formats
+// Initialize requires a supported uri using one of the following supported formats:
+// - sqlite3:path/to/file.db
+// - mysql:user:password@tcp(hostname:port)/database
 func Initialize(uri string) (err error) {
 	switch {
 	case strings.HasPrefix(uri, "sqlite3:"):
@@ -17,7 +18,7 @@ func Initialize(uri string) (err error) {
 	case strings.HasPrefix(uri, "mysql:"):
 		dbDriver, err = sql.ConnectMySQL(strings.TrimPrefix(uri, "mysql:"))
 	default:
-		err = fmt.Errorf("elephant: unsupported uri string: %s", uri)
+		err = util.Errorf("unsupported uri string: %s", uri)
 	}
 	if err != nil {
 		dbDriver = nil
@@ -37,19 +38,12 @@ func Initialize(uri string) (err error) {
 	return nil
 }
 
-// Retrieve gets one element from a specific type filtering by key. Returns the element if found and nil if not
-func Retrieve[inputType any](key string) *inputType {
+// Retrieve gets one element from a specific type filtering by id. Returns the element if found and nil if not
+func Retrieve[inputType any](id string) (*inputType, error) {
 	checkInitialization()
-	action := newInternalAction(actionRetrieve, reflect.TypeFor[*inputType](), key)
+	action := newInternalAction(actionRetrieve, reflect.TypeFor[*inputType](), id)
 	channel <- action
-	switch v := (<-action.output).(type) {
-	case *inputType:
-		return v
-	case nil:
-		return nil
-	default:
-		panic(v)
-	}
+	return handleOutputType[*inputType](<-action.output, true)
 }
 
 // RetrieveBy gets one element from a specific type filtering by other attribute. Returns the element if found and nil if parameters are incorrect or the element is not found
@@ -57,16 +51,7 @@ func RetrieveBy[inputType any](attribute string, input any) (*inputType, error) 
 	checkInitialization()
 	action := newInternalAction(actionRetrieveBy, reflect.TypeFor[*inputType](), attribute, input)
 	channel <- action
-	switch v := (<-action.output).(type) {
-	case error:
-		return nil, v
-	case *inputType:
-		return v, nil
-	case nil:
-		return nil, nil
-	default:
-		panic(v)
-	}
+	return handleOutputType[*inputType](<-action.output, true)
 }
 
 // RetrieveAll gets all elements with a specific type. Returns a map with all elements. It will be empty if there are no elements
@@ -74,16 +59,7 @@ func RetrieveAll[inputType any]() (map[string]*inputType, error) {
 	checkInitialization()
 	action := newInternalAction(actionRetrieveAll, reflect.TypeFor[*inputType](), nil)
 	channel <- action
-	switch v := (<-action.output).(type) {
-	case map[string]any:
-		return util.CopyMapOfObjects[*inputType](v)
-	case error:
-		return nil, v
-	case nil:
-		return nil, nil
-	default:
-		panic(v)
-	}
+	return handleOutputMap[map[string]*inputType](<-action.output)
 }
 
 // Remove deletes one element from the database. Returns err if the object does not exist
@@ -91,23 +67,15 @@ func Remove(input any) error {
 	checkInitialization()
 	action := newInternalAction(actionRemove, reflect.TypeOf(input), input)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
 }
 
-// RemoveByKey deletes one element from the database. Returns err if the object does not exist
-func RemoveByKey[inputType any](key string) error {
+// RemoveById deletes one element from the database. Returns err if the object does not exist
+func RemoveById[inputType any](id string) error {
 	checkInitialization()
-	action := newInternalAction(actionRemoveByKey, reflect.TypeFor[*inputType](), key)
+	action := newInternalAction(actionRemoveById, reflect.TypeFor[*inputType](), id)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
 }
 
 // Update modifies an element on the database
@@ -115,106 +83,88 @@ func Update(input any) error {
 	checkInitialization()
 	action := newInternalAction(actionUpdate, reflect.TypeOf(input), input)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
 }
 
-// Create adds one element to the database. If the key attribute value is empty (""), a new one will be assigned
+// Create adds one element to the database. If the id attribute value is empty (""), a new one will be assigned
 func Create(input any) (string, error) {
 	checkInitialization()
 	action := newInternalAction(actionCreate, reflect.TypeOf(input), input)
 	channel <- action
-	output := <-action.output
-	if reflect.TypeOf(output).Kind() == reflect.String {
-		return output.(string), nil
-	}
-	return "", output.(error)
+	return handleOutputType[string](<-action.output, false)
 }
 
-// Exists checks if one key is in use in the database
-func Exists[inputType any](key string) bool {
+// Exists checks if one id is in use in the database
+func Exists[inputType any](id string) (bool, error) {
 	checkInitialization()
-	action := newInternalAction(actionExists, reflect.TypeFor[*inputType](), key)
+	action := newInternalAction(actionExists, reflect.TypeFor[*inputType](), id)
 	channel <- action
-	return (<-action.output).(bool)
+	return handleOutputType[bool](<-action.output, false)
 }
 
 // ExistsBy gets one element from a specific type filtering by other attribute. Returns true if found and false if parameters are incorrect or the element is not found
-func ExistsBy[inputType any](attribute string, input any) bool {
+func ExistsBy[inputType any](attribute string, input any) (bool, error) {
 	checkInitialization()
 	action := newInternalAction(actionExistsBy, reflect.TypeFor[*inputType](), attribute, input)
 	channel <- action
-	return (<-action.output).(bool)
+	return handleOutputType[bool](<-action.output, false)
 }
 
-// NextID gives an empty id to create a new entry
-func NextID[inputType any]() string {
+// NewID gives an empty id to create a new entry
+//
+// Deprecated: It is better to leave the object without ID so elephant can assign the ID in that moment
+func NewID[inputType any]() (string, error) {
 	checkInitialization()
 	action := newInternalAction(actionNextID, reflect.TypeFor[*inputType]())
 	channel <- action
-	return (<-action.output).(string)
+	return handleOutputType[string](<-action.output, false)
 }
 
-// Upsert updates or inserts the entry. Returns the key of the modified object or an error
+// Upsert updates or inserts the entry. Returns the id of the modified object or an error
 func Upsert(input any) (string, error) {
 	checkInitialization()
 	action := newInternalAction(actionUpsert, reflect.TypeOf(input), input)
 	channel <- action
-	output := <-action.output
-	if reflect.TypeOf(output).Kind() == reflect.String {
-		return output.(string), nil
-	}
-	return "", output.(error)
+	return handleOutputType[string](<-action.output, false)
 }
 
 // BlobRetrieve returns blob contents if found. If not, returns nil
-func BlobRetrieve(key string) *[]byte {
+func BlobRetrieve(id string) (*[]byte, error) {
 	checkInitialization()
-	action := newInternalAction(actionBlobRetrieve, blobReflectType, key)
+	action := newInternalAction(actionBlobRetrieve, blobReflectType, id)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(*[]byte)
-	}
-	return nil
+	return handleOutputType[*[]byte](<-action.output, false)
 }
 
 // BlobCreate adds one byte blob to the database
-func BlobCreate(key string, contents *[]byte) error {
+func BlobCreate(id string, contents *[]byte) error {
 	checkInitialization()
-	action := newInternalAction(actionBlobCreate, blobReflectType, key, contents)
+	action := newInternalAction(actionBlobCreate, blobReflectType, id, contents)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
 }
 
 // BlobRemove removes one byte blob from the database
-func BlobRemove(key string) error {
+func BlobRemove(id string) error {
 	checkInitialization()
-	action := newInternalAction(actionBlobRemove, blobReflectType, key)
+	action := newInternalAction(actionBlobRemove, blobReflectType, id)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
 }
 
-func BlobUpdate(key string, contents *[]byte) error {
+func BlobUpdate(id string, contents *[]byte) error {
 	checkInitialization()
-	action := newInternalAction(actionBlobUpdate, blobReflectType, key, contents)
+	action := newInternalAction(actionBlobUpdate, blobReflectType, id, contents)
 	channel <- action
-	output := <-action.output
-	if output != nil {
-		return output.(error)
-	}
-	return nil
+	return (<-action.output).err
+}
+
+// BlobExists checks if one id is in use in the blobs table
+func BlobExists(id string) (bool, error) {
+	checkInitialization()
+	action := newInternalAction(actionBlobExists, blobReflectType, id)
+	channel <- action
+	return handleOutputType[bool](<-action.output, false)
 }
 
 // Close should be called as a deferred method after Initialize
@@ -224,4 +174,45 @@ func Close() {
 	waitgroup.Wait()
 	dbDriver.Close()
 	dbDriver = nil
+}
+
+func handleOutputType[inputType any](output actionOutput, copy bool) (inputType, error) {
+	var zero inputType
+	if output.err != nil {
+		return zero, output.err
+	}
+	if util.IsNilable[inputType]() && output.data == nil {
+		return zero, nil
+	}
+	if reflect.TypeFor[inputType]().Kind() == reflect.Map {
+		return zero, util.Errorf("error handling map instance")
+	}
+	v, ok := (output.data).(inputType)
+	if !ok {
+		return zero, util.Errorf("error casting output to defined type")
+	}
+	if !copy {
+		return v, nil
+	}
+	objectCopy, err := util.CopyEntireObject(v)
+	if err != nil {
+		return zero, err
+	}
+	return objectCopy.(inputType), nil
+}
+
+func handleOutputMap[inputType map[string]K, K any](output actionOutput) (inputType, error) {
+	var zero inputType
+	originalMap, ok := (output.data).(map[string]any)
+	if !ok {
+		return zero, util.Errorf("error casting output map")
+	}
+	mapCopy, err := util.CopyMapOfObjects[inputType](originalMap)
+	if err != nil {
+		return zero, err
+	}
+	if outputMap, ok := any(mapCopy).(inputType); ok {
+		return outputMap, nil
+	}
+	return zero, util.Errorf("error copying map instance")
 }

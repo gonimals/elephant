@@ -3,8 +3,10 @@ package sql
 import "regexp"
 
 var /*const*/ stmtsSqlite3 = map[int]string{
+	stmtDropTable:   "drop table if exists '%s'",
 	stmtCheckTable:  "select id from %s limit 1",
 	stmtCreateTable: "create table '%s' ( id varchar(%d) primary key, value text )",
+	stmtExists:      "select id from '%s' where id = ?",
 	stmtRetrieve:    "select value from '%s' where id = ?",
 	stmtRetrieveAll: "select id, value from '%s'",
 	stmtInsert:      "insert into '%s' (id, value) values (?, ?)",

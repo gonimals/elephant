@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"testing"
@@ -14,7 +15,22 @@ func testDriver(t *testing.T, db *driver) {
 }
 
 func testBasicUsage(t *testing.T, db *driver) {
-	err := db.Create("test_table", "1", "{ \"fdsa\": [] }")
+	_, err := db.db.Exec(fmt.Sprintf(db.baseStmts[stmtDropTable], "test_table"))
+	if err != nil {
+		t.Error("simple drop table fails:", err)
+		return
+	}
+	_, err = db.db.Exec(fmt.Sprintf(db.baseStmts[stmtDropTable], BlobsTableName))
+	if err != nil {
+		t.Error("simple drop of blobs table fails:", err)
+		return
+	}
+	err = db.ensureBlobsTableIsHandled()
+	if err != nil {
+		t.Error("blobs table creation fails:", err)
+		return
+	}
+	err = db.Create("test_table", "1", "{ \"fdsa\": [] }")
 	if err != nil {
 		t.Error("simple create operation fails:", err)
 	}
@@ -65,6 +81,20 @@ func testBasicUsage(t *testing.T, db *driver) {
 	if err != nil {
 		t.Error("blob update operation fails:", err)
 	}
+	exists, err := db.BlobExists("1")
+	if err != nil {
+		t.Error("blob exists operation fails with error:", err)
+	}
+	if !exists {
+		t.Error("blob exists shows existing value as non-existing")
+	}
+	exists, err = db.BlobExists("asdf")
+	if err != nil {
+		t.Error("blob exists operation fails:", err)
+	}
+	if exists {
+		t.Error("blob exists shows non-existing value as existing")
+	}
 	blob, err = db.BlobRetrieve("1")
 	if err != nil {
 		t.Error("blob retrieve operation fails:", err)
@@ -89,14 +119,14 @@ func testBasicUsage(t *testing.T, db *driver) {
 }
 
 func testLimits(t *testing.T, db *driver) {
-	longString := strings.Repeat("A", MaxKeyLength+1)
+	longString := strings.Repeat("A", MaxIdLength+1)
 	err := db.Create("limits", longString, "asdf")
 	if err == nil {
-		t.Error("too long key should fail")
+		t.Error("too long id should fail")
 	}
 	err = db.BlobCreate(longString, &[]byte{0x00})
 	if err == nil {
-		t.Error("too long key should fail")
+		t.Error("too long id should fail")
 	}
 	longString = strings.Repeat("A", 1024*1024*1024) //1GB
 	log.Println("A very big query will be executed. A database driver error is acceptable right now")
